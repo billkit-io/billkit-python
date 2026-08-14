@@ -95,7 +95,7 @@ class TestDefaultClientsWithoutAiohttp(unittest.TestCase):
 
             with self.assertRaises(RuntimeError) as ctx:
                 billkit._default_clients.DefaultAioHttpClient()
-            self.assertIn("pip install billkit[aiohttp]", str(ctx.exception))
+            self.assertIn("pip install billkit-sdk[aiohttp]", str(ctx.exception))
 
         importlib.reload(billkit._default_clients)
 

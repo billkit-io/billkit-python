@@ -1,7 +1,7 @@
 # Billkit Python Library
 
 [![fern shield](https://img.shields.io/badge/%F0%9F%8C%BF-Built%20with%20Fern-brightgreen)](https://buildwithfern.com?utm_source=github&utm_medium=github&utm_campaign=readme&utm_source=https%3A%2F%2Fgithub.com%2Fbillkit-io%2Fbillkit-python)
-[![pypi](https://img.shields.io/pypi/v/billkit)](https://pypi.python.org/pypi/billkit)
+[![pypi](https://img.shields.io/pypi/v/billkit-sdk)](https://pypi.python.org/pypi/billkit-sdk)
 
 The Billkit Python library provides convenient access to the Billkit APIs from Python.
 
@@ -22,7 +22,7 @@ The Billkit Python library provides convenient access to the Billkit APIs from P
 ## Installation
 
 ```sh
-pip install billkit
+pip install billkit-sdk
 ```
 
 ## Reference
