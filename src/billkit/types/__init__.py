@@ -23,6 +23,7 @@ if typing.TYPE_CHECKING:
     from .decision import Decision
     from .feature_definition import FeatureDefinition
     from .feature_type import FeatureType
+    from .feature_usage import FeatureUsage
     from .feature_value import FeatureValue
     from .gate_response import GateResponse
     from .invoice_line_item_response import InvoiceLineItemResponse
@@ -54,6 +55,7 @@ if typing.TYPE_CHECKING:
     from .subject_info import SubjectInfo
     from .subjects_response import SubjectsResponse
     from .tenant_me_response import TenantMeResponse
+    from .usage_response import UsageResponse
     from .validation_error import ValidationError
     from .validation_error_response import ValidationErrorResponse
 _dynamic_imports: typing.Dict[str, str] = {
@@ -74,6 +76,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "Decision": ".decision",
     "FeatureDefinition": ".feature_definition",
     "FeatureType": ".feature_type",
+    "FeatureUsage": ".feature_usage",
     "FeatureValue": ".feature_value",
     "GateResponse": ".gate_response",
     "InvoiceLineItemResponse": ".invoice_line_item_response",
@@ -105,6 +108,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "SubjectInfo": ".subject_info",
     "SubjectsResponse": ".subjects_response",
     "TenantMeResponse": ".tenant_me_response",
+    "UsageResponse": ".usage_response",
     "ValidationError": ".validation_error",
     "ValidationErrorResponse": ".validation_error_response",
 }
@@ -149,6 +153,7 @@ __all__ = [
     "Decision",
     "FeatureDefinition",
     "FeatureType",
+    "FeatureUsage",
     "FeatureValue",
     "GateResponse",
     "InvoiceLineItemResponse",
@@ -180,6 +185,7 @@ __all__ = [
     "SubjectInfo",
     "SubjectsResponse",
     "TenantMeResponse",
+    "UsageResponse",
     "ValidationError",
     "ValidationErrorResponse",
 ]
