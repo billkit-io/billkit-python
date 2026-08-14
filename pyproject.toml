@@ -1,9 +1,9 @@
 [project]
-name = "billkit"
+name = "billkit-sdk"
 dynamic = ["version"]
 
 [tool.poetry]
-name = "billkit"
+name = "billkit-sdk"
 version = "0.0.2"
 description = ""
 readme = "README.md"
