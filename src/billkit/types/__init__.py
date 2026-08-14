@@ -58,6 +58,7 @@ if typing.TYPE_CHECKING:
     from .usage_response import UsageResponse
     from .validation_error import ValidationError
     from .validation_error_response import ValidationErrorResponse
+    from .validation_warning import ValidationWarning
 _dynamic_imports: typing.Dict[str, str] = {
     "AddonDefinition": ".addon_definition",
     "AddonType": ".addon_type",
@@ -111,6 +112,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "UsageResponse": ".usage_response",
     "ValidationError": ".validation_error",
     "ValidationErrorResponse": ".validation_error_response",
+    "ValidationWarning": ".validation_warning",
 }
 
 
@@ -188,4 +190,5 @@ __all__ = [
     "UsageResponse",
     "ValidationError",
     "ValidationErrorResponse",
+    "ValidationWarning",
 ]

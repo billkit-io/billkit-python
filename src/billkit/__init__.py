@@ -59,6 +59,7 @@ if typing.TYPE_CHECKING:
         UsageResponse,
         ValidationError,
         ValidationErrorResponse,
+        ValidationWarning,
     )
     from .errors import (
         BadGatewayError,
@@ -147,6 +148,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "UsageResponse": ".types",
     "ValidationError": ".types",
     "ValidationErrorResponse": ".types",
+    "ValidationWarning": ".types",
     "__version__": ".version",
     "addons": ".addons",
     "api_keys": ".api_keys",
@@ -246,6 +248,7 @@ __all__ = [
     "UsageResponse",
     "ValidationError",
     "ValidationErrorResponse",
+    "ValidationWarning",
     "__version__",
     "addons",
     "api_keys",
