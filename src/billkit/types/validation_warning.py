@@ -4,18 +4,15 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .validation_error import ValidationError
-from .validation_warning import ValidationWarning
 
 
-class ValidationErrorResponse(UniversalBaseModel):
+class ValidationWarning(UniversalBaseModel):
     """
-    Response body for validation endpoints.
+    Validation warning — informational issue that does not prevent schema acceptance.
     """
 
-    errors: typing.Optional[typing.List[ValidationError]] = None
-    valid: bool
-    warnings: typing.Optional[typing.List[ValidationWarning]] = None
+    field: str
+    message: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
