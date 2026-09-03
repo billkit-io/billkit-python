@@ -14,6 +14,12 @@ class TenantMeResponse(UniversalBaseModel):
     created_at: str
     org_id: str
     plan_key: str
+    stripe_customer_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Stripe Customer ID on the platform account, if a payment method has been
+    collected for this tenant. Absent (omitted) if none is on file.
+    """
+
     tenant_id: str
 
     if IS_PYDANTIC_V2:

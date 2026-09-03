@@ -9,18 +9,18 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 class FeatureUsage(UniversalBaseModel):
     """
-    A single feature's usage statistics in the response.
+    A single feature's usage statistics in the aggregated response.
+
+    Plan-specific fields (limit, cadence, overage, warning) are intentionally
+    omitted from the aggregated view because they are per-plan and cannot be
+    meaningfully resolved at the tenant level. Use `?per_subject=true` for
+    per-subject usage with plan-specific limits.
     """
 
     billing_period_usage: typing.Optional[int] = pydantic.Field(default=None)
     """
     Cumulative usage across all cadence windows in the current billing period.
     Only present when the tenant has a billing configuration.
-    """
-
-    cadence: typing.Optional[str] = pydantic.Field(default=None)
-    """
-    The cadence window (e.g., "monthly", "daily") if applicable.
     """
 
     feature_code: str = pydantic.Field()
@@ -33,16 +33,6 @@ class FeatureUsage(UniversalBaseModel):
     The feature type (metered, stateful, boolean, attribute).
     """
 
-    limit: typing.Optional[int] = pydantic.Field(default=None)
-    """
-    The plan limit for this feature (null if unlimited or not applicable).
-    """
-
-    overage: typing.Optional[str] = pydantic.Field(default=None)
-    """
-    The overage policy ("block" or "soft") if applicable.
-    """
-
     resets_at: typing.Optional[dt.datetime] = pydantic.Field(default=None)
     """
     When the counter will next reset (ISO 8601, equal to window_end). Only present for metered features with a cadence.
@@ -51,11 +41,6 @@ class FeatureUsage(UniversalBaseModel):
     total_usage: int = pydantic.Field()
     """
     Total consumption across all subjects for this feature in the current cadence window.
-    """
-
-    warning: bool = pydantic.Field()
-    """
-    Whether usage exceeds 80% of the limit (warning threshold).
     """
 
     window_end: typing.Optional[dt.datetime] = pydantic.Field(default=None)

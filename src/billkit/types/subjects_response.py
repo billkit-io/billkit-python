@@ -12,6 +12,16 @@ class SubjectsResponse(UniversalBaseModel):
     Response body for `GET /subjects`.
     """
 
+    has_more: bool = pydantic.Field()
+    """
+    Whether more results exist beyond this page.
+    """
+
+    next_cursor: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Opaque cursor for the next page. Null/absent on the last page.
+    """
+
     subjects: typing.List[SubjectInfo]
 
     if IS_PYDANTIC_V2:

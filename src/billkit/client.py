@@ -20,6 +20,7 @@ if typing.TYPE_CHECKING:
     from .schema.client import AsyncSchemaClient, SchemaClient
     from .subjects.client import AsyncSubjectsClient, SubjectsClient
     from .tenants.client import AsyncTenantsClient, TenantsClient
+    from .usage.client import AsyncUsageClient, UsageClient
 
 
 class BillkitApi:
@@ -107,6 +108,7 @@ class BillkitApi:
         self._pricing: typing.Optional[PricingClient] = None
         self._schema: typing.Optional[SchemaClient] = None
         self._subjects: typing.Optional[SubjectsClient] = None
+        self._usage: typing.Optional[UsageClient] = None
         self._tenants: typing.Optional[TenantsClient] = None
 
     @property
@@ -188,6 +190,14 @@ class BillkitApi:
 
             self._subjects = SubjectsClient(client_wrapper=self._client_wrapper)
         return self._subjects
+
+    @property
+    def usage(self):
+        if self._usage is None:
+            from .usage.client import UsageClient  # noqa: E402
+
+            self._usage = UsageClient(client_wrapper=self._client_wrapper)
+        return self._usage
 
     @property
     def tenants(self):
@@ -299,6 +309,7 @@ class AsyncBillkitApi:
         self._pricing: typing.Optional[AsyncPricingClient] = None
         self._schema: typing.Optional[AsyncSchemaClient] = None
         self._subjects: typing.Optional[AsyncSubjectsClient] = None
+        self._usage: typing.Optional[AsyncUsageClient] = None
         self._tenants: typing.Optional[AsyncTenantsClient] = None
 
     @property
@@ -380,6 +391,14 @@ class AsyncBillkitApi:
 
             self._subjects = AsyncSubjectsClient(client_wrapper=self._client_wrapper)
         return self._subjects
+
+    @property
+    def usage(self):
+        if self._usage is None:
+            from .usage.client import AsyncUsageClient  # noqa: E402
+
+            self._usage = AsyncUsageClient(client_wrapper=self._client_wrapper)
+        return self._usage
 
     @property
     def tenants(self):

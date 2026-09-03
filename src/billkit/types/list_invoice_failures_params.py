@@ -6,9 +6,9 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
-class ListInvoicesParams(UniversalBaseModel):
+class ListInvoiceFailuresParams(UniversalBaseModel):
     """
-    Query parameters for `GET /invoices`.
+    Query parameters for `GET /invoice-failures`.
     """
 
     cursor: typing.Optional[str] = pydantic.Field(default=None)
@@ -16,27 +16,15 @@ class ListInvoicesParams(UniversalBaseModel):
     Pagination: opaque cursor from a previous response's `next_cursor` field.
     """
 
-    end_date: typing.Optional[str] = pydantic.Field(default=None)
+    exhausted: typing.Optional[bool] = pydantic.Field(default=None)
     """
-    Filter: only include invoices with billing_period_start <= end_date.
-    Must be a valid RFC 3339 timestamp; an unparseable value returns 400.
+    Filter by whether the retry budget is exhausted. When omitted, both
+    retryable and exhausted markers are returned.
     """
 
     limit: typing.Optional[int] = pydantic.Field(default=None)
     """
     Pagination: maximum number of items to return per page (1–1000, default 100).
-    """
-
-    start_date: typing.Optional[str] = pydantic.Field(default=None)
-    """
-    Filter: only include invoices with billing_period_end >= start_date.
-    Must be a valid RFC 3339 timestamp; an unparseable value returns 400.
-    """
-
-    status: typing.Optional[str] = pydantic.Field(default=None)
-    """
-    Filter by invoice status. Must be one of "open", "paid", "past_due",
-    "payment_failed", or "uncollectible"; any other value returns 400.
     """
 
     subject_id: typing.Optional[str] = pydantic.Field(default=None)

@@ -10,9 +10,14 @@ from ..core.parse_error import ParsingError
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
+from ..errors.forbidden_error import ForbiddenError
 from ..errors.internal_server_error import InternalServerError
 from ..errors.not_found_error import NotFoundError
+from ..errors.unauthorized_error import UnauthorizedError
+from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.validation_error_response import ValidationErrorResponse
+from .types.get_schema_request_format import GetSchemaRequestFormat
+from .types.validate_schema_request_format import ValidateSchemaRequestFormat
 from pydantic import ValidationError
 
 
@@ -20,33 +25,59 @@ class RawSchemaClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    def get_schema(self, *, request_options: typing.Optional[RequestOptions] = None) -> HttpResponse[str]:
+    def get_schema(
+        self,
+        *,
+        format: typing.Optional[GetSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[str]:
         """
         Retrieves the tenant's own schema document from the store.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
-        - If the tenant has a schema: returns 200 with the schema document body (as stored).
+        Accepts an optional `?format=yaml` or `?format=json` query parameter.
+        Defaults to JSON (the canonical storage format). When `yaml` is requested,
+        the stored JSON is converted to YAML before returning.
+
+        - If the tenant has a schema: returns 200 with the schema document body.
         - If the tenant has no schema: returns 404 with `{ "error": "schema not found" }`.
         - If a store error occurs: returns 500 with `{ "error": "internal error" }`.
 
         Parameters
         ----------
+        format : typing.Optional[GetSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
         HttpResponse[str]
-            Schema document (YAML or JSON)
+            Schema document (JSON or YAML)
         """
         _response = self._client_wrapper.httpx_client.request(
             "schema",
             method="GET",
+            params={
+                "format": format,
+            },
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=_response.text)  # type: ignore
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -79,19 +110,34 @@ class RawSchemaClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def put_schema(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, force: typing.Optional[bool] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[ValidationErrorResponse]:
         """
         Validates, persists to store, and invalidates all tenant cache entries.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
+        Before persisting, the new document is checked for referential integrity
+        against the tenant's existing subject assignments: if any assignment
+        references a `plan_key`, `contract_key`, or add-on key that would no
+        longer exist in the new document, the upload is rejected (422) so that
+        assignments never silently go stale. Pass `?force=true` to bypass this
+        check and persist anyway (e.g. when reassigning affected subjects out of
+        band).
+
         - If the body is empty: returns 400.
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }` (not persisted).
+        - If persisting would orphan subject assignments and `force` is not set: returns 422 with `{ "valid": false, "errors": [...] }` (not persisted).
         - If the document is valid: persists to store, invalidates cache, returns 200 with `{ "valid": true, "errors": [] }`.
         - If a store or cache error occurs: returns 500.
 
         Parameters
         ----------
+        force : typing.Optional[bool]
+            When `true`, bypass the referential-integrity check against existing
+            subject assignments and persist the schema even if doing so would orphan
+            a plan, contract, or add-on key that subjects are still assigned to.
+            Defaults to `false`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -103,6 +149,9 @@ class RawSchemaClient:
         _response = self._client_wrapper.httpx_client.request(
             "schema",
             method="PUT",
+            params={
+                "force": force,
+            },
             request_options=request_options,
         )
         try:
@@ -117,6 +166,39 @@ class RawSchemaClient:
                 return HttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -147,14 +229,22 @@ class RawSchemaClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def validate_schema(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        format: typing.Optional[ValidateSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ValidationErrorResponse]:
         """
         Accepts a raw schema document body (YAML or JSON), runs the full validator
         (structural + semantic), and returns a `ValidationErrorResponse` without
         persisting anything.
 
-        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }`.
+        Accepts an optional `?format=json` or `?format=yaml` query parameter.
+        When provided and the schema is valid, the response includes a `document`
+        field containing the schema serialized in the requested format.
+        Defaults to no document in the response (backward-compatible).
+
+        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }` (and optionally `"document": "..."`).
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }`.
         - If the body is empty: returns 400.
 
@@ -163,6 +253,9 @@ class RawSchemaClient:
 
         Parameters
         ----------
+        format : typing.Optional[ValidateSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -174,6 +267,9 @@ class RawSchemaClient:
         _response = self._client_wrapper.httpx_client.request(
             "schema/validate",
             method="POST",
+            params={
+                "format": format,
+            },
             request_options=request_options,
         )
         try:
@@ -197,6 +293,17 @@ class RawSchemaClient:
                         ),
                     ),
                 )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -211,33 +318,59 @@ class AsyncRawSchemaClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    async def get_schema(self, *, request_options: typing.Optional[RequestOptions] = None) -> AsyncHttpResponse[str]:
+    async def get_schema(
+        self,
+        *,
+        format: typing.Optional[GetSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[str]:
         """
         Retrieves the tenant's own schema document from the store.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
-        - If the tenant has a schema: returns 200 with the schema document body (as stored).
+        Accepts an optional `?format=yaml` or `?format=json` query parameter.
+        Defaults to JSON (the canonical storage format). When `yaml` is requested,
+        the stored JSON is converted to YAML before returning.
+
+        - If the tenant has a schema: returns 200 with the schema document body.
         - If the tenant has no schema: returns 404 with `{ "error": "schema not found" }`.
         - If a store error occurs: returns 500 with `{ "error": "internal error" }`.
 
         Parameters
         ----------
+        format : typing.Optional[GetSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
         AsyncHttpResponse[str]
-            Schema document (YAML or JSON)
+            Schema document (JSON or YAML)
         """
         _response = await self._client_wrapper.httpx_client.request(
             "schema",
             method="GET",
+            params={
+                "format": format,
+            },
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=_response.text)  # type: ignore
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -270,19 +403,34 @@ class AsyncRawSchemaClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def put_schema(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, force: typing.Optional[bool] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[ValidationErrorResponse]:
         """
         Validates, persists to store, and invalidates all tenant cache entries.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
+        Before persisting, the new document is checked for referential integrity
+        against the tenant's existing subject assignments: if any assignment
+        references a `plan_key`, `contract_key`, or add-on key that would no
+        longer exist in the new document, the upload is rejected (422) so that
+        assignments never silently go stale. Pass `?force=true` to bypass this
+        check and persist anyway (e.g. when reassigning affected subjects out of
+        band).
+
         - If the body is empty: returns 400.
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }` (not persisted).
+        - If persisting would orphan subject assignments and `force` is not set: returns 422 with `{ "valid": false, "errors": [...] }` (not persisted).
         - If the document is valid: persists to store, invalidates cache, returns 200 with `{ "valid": true, "errors": [] }`.
         - If a store or cache error occurs: returns 500.
 
         Parameters
         ----------
+        force : typing.Optional[bool]
+            When `true`, bypass the referential-integrity check against existing
+            subject assignments and persist the schema even if doing so would orphan
+            a plan, contract, or add-on key that subjects are still assigned to.
+            Defaults to `false`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -294,6 +442,9 @@ class AsyncRawSchemaClient:
         _response = await self._client_wrapper.httpx_client.request(
             "schema",
             method="PUT",
+            params={
+                "force": force,
+            },
             request_options=request_options,
         )
         try:
@@ -308,6 +459,39 @@ class AsyncRawSchemaClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -338,14 +522,22 @@ class AsyncRawSchemaClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def validate_schema(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        format: typing.Optional[ValidateSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ValidationErrorResponse]:
         """
         Accepts a raw schema document body (YAML or JSON), runs the full validator
         (structural + semantic), and returns a `ValidationErrorResponse` without
         persisting anything.
 
-        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }`.
+        Accepts an optional `?format=json` or `?format=yaml` query parameter.
+        When provided and the schema is valid, the response includes a `document`
+        field containing the schema serialized in the requested format.
+        Defaults to no document in the response (backward-compatible).
+
+        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }` (and optionally `"document": "..."`).
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }`.
         - If the body is empty: returns 400.
 
@@ -354,6 +546,9 @@ class AsyncRawSchemaClient:
 
         Parameters
         ----------
+        format : typing.Optional[ValidateSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -365,6 +560,9 @@ class AsyncRawSchemaClient:
         _response = await self._client_wrapper.httpx_client.request(
             "schema/validate",
             method="POST",
+            params={
+                "format": format,
+            },
             request_options=request_options,
         )
         try:
@@ -379,6 +577,17 @@ class AsyncRawSchemaClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,

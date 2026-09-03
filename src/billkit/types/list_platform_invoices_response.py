@@ -4,22 +4,18 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .platform_invoice_item import PlatformInvoiceItem
 
 
-class KeyListItem(UniversalBaseModel):
+class ListPlatformInvoicesResponse(UniversalBaseModel):
     """
-    A single API key in the list response (key is masked).
-
-    Note: there is intentionally no `last_used_at` field. Tracking key usage
-    requires a throttled write on the auth hot path (see #230) and is deferred
-    post-MVP — the field was previously always `None`/absent, which is worse
-    than not advertising it at all.
+    Response body for `GET /invoices/platform`.
     """
 
-    created_at: str
-    key_id: str
-    name: str
-    prefix: str
+    invoices: typing.List[PlatformInvoiceItem] = pydantic.Field()
+    """
+    List of platform invoices, sorted by created_at descending.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

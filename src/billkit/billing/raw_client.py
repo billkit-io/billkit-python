@@ -12,7 +12,11 @@ from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
 from ..errors.internal_server_error import InternalServerError
 from ..errors.not_found_error import NotFoundError
+from ..errors.payment_required_error import PaymentRequiredError
+from ..errors.unauthorized_error import UnauthorizedError
+from ..types.change_plan_response import ChangePlanResponse
 from ..types.create_portal_token_response import CreatePortalTokenResponse
+from ..types.portal_list_invoices_response import PortalListInvoicesResponse
 from pydantic import ValidationError
 
 # this is used as the default value for optional parameters
@@ -22,6 +26,143 @@ OMIT = typing.cast(typing.Any, ...)
 class RawBillingClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def change_plan(
+        self, *, plan_key: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[ChangePlanResponse]:
+        """
+        Allows a portal-authenticated subject to switch their plan. This is the
+        immediate-switch path only: it handles the case where billing is not configured
+        in the schema, or where the old and new plan have equal prices (lateral move).
+
+        Upgrade/downgrade branches (with proration math and Stripe charges) are
+        implemented in a later task and will extend this handler.
+
+        ## Authentication
+        Requires portal JWT (Bearer token). The subject identity comes from
+        the `PortalContext` extension (injected by `portal_auth_middleware`).
+
+        ## Request Body
+        ```json
+        { "plan_key": "pro" }
+        ```
+
+        ## Response (200)
+        ```json
+        {
+          "subject_id": "user_123",
+          "previous_plan_key": "starter",
+          "new_plan_key": "pro",
+          "changed_at": "2024-01-15T12:30:00Z",
+          "effective": "immediate",
+          "proration_charge_cents": 0
+        }
+        ```
+
+        ## Errors
+        - 400: Empty `plan_key` or already on the requested plan
+        - 401: Missing or invalid portal token
+        - 404: Subject not found or plan key not in schema
+        - 500: Internal error
+
+        Parameters
+        ----------
+        plan_key : str
+            The plan key to switch to.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ChangePlanResponse]
+            Plan changed successfully
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "billing/change-plan",
+            method="POST",
+            json={
+                "plan_key": plan_key,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ChangePlanResponse,
+                    parse_obj_as(
+                        type_=ChangePlanResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 402:
+                raise PaymentRequiredError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def create_portal_token(
         self, *, subject_id: str, request_options: typing.Optional[RequestOptions] = None
@@ -100,8 +241,111 @@ class RawBillingClient:
                         ),
                     ),
                 )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def portal_list_invoices(
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[PortalListInvoicesResponse]:
+        """
+        Scoped to the subject identified in the portal token. Cannot see other subjects' invoices.
+        Supports cursor-based pagination with portal-specific limits (default 50, max 200).
+
+        Query parameters:
+        - `limit` — maximum number of items per page (1–200, default 50)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[PortalListInvoicesResponse]
+            Paginated list of portal invoices
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "portal/invoices",
+            method="GET",
+            params={
+                "limit": limit,
+                "cursor": cursor,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PortalListInvoicesResponse,
+                    parse_obj_as(
+                        type_=PortalListInvoicesResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -135,6 +379,143 @@ class RawBillingClient:
 class AsyncRawBillingClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def change_plan(
+        self, *, plan_key: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[ChangePlanResponse]:
+        """
+        Allows a portal-authenticated subject to switch their plan. This is the
+        immediate-switch path only: it handles the case where billing is not configured
+        in the schema, or where the old and new plan have equal prices (lateral move).
+
+        Upgrade/downgrade branches (with proration math and Stripe charges) are
+        implemented in a later task and will extend this handler.
+
+        ## Authentication
+        Requires portal JWT (Bearer token). The subject identity comes from
+        the `PortalContext` extension (injected by `portal_auth_middleware`).
+
+        ## Request Body
+        ```json
+        { "plan_key": "pro" }
+        ```
+
+        ## Response (200)
+        ```json
+        {
+          "subject_id": "user_123",
+          "previous_plan_key": "starter",
+          "new_plan_key": "pro",
+          "changed_at": "2024-01-15T12:30:00Z",
+          "effective": "immediate",
+          "proration_charge_cents": 0
+        }
+        ```
+
+        ## Errors
+        - 400: Empty `plan_key` or already on the requested plan
+        - 401: Missing or invalid portal token
+        - 404: Subject not found or plan key not in schema
+        - 500: Internal error
+
+        Parameters
+        ----------
+        plan_key : str
+            The plan key to switch to.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ChangePlanResponse]
+            Plan changed successfully
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "billing/change-plan",
+            method="POST",
+            json={
+                "plan_key": plan_key,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ChangePlanResponse,
+                    parse_obj_as(
+                        type_=ChangePlanResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 402:
+                raise PaymentRequiredError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def create_portal_token(
         self, *, subject_id: str, request_options: typing.Optional[RequestOptions] = None
@@ -213,8 +594,111 @@ class AsyncRawBillingClient:
                         ),
                     ),
                 )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def portal_list_invoices(
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[PortalListInvoicesResponse]:
+        """
+        Scoped to the subject identified in the portal token. Cannot see other subjects' invoices.
+        Supports cursor-based pagination with portal-specific limits (default 50, max 200).
+
+        Query parameters:
+        - `limit` — maximum number of items per page (1–200, default 50)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[PortalListInvoicesResponse]
+            Paginated list of portal invoices
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "portal/invoices",
+            method="GET",
+            params={
+                "limit": limit,
+                "cursor": cursor,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PortalListInvoicesResponse,
+                    parse_obj_as(
+                        type_=PortalListInvoicesResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,

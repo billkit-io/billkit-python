@@ -11,55 +11,65 @@ from ..core.parse_error import ParsingError
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
-from ..errors.forbidden_error import ForbiddenError
+from ..errors.conflict_error import ConflictError
 from ..errors.internal_server_error import InternalServerError
-from ..errors.unauthorized_error import UnauthorizedError
+from ..errors.not_found_error import NotFoundError
+from ..errors.service_unavailable_error import ServiceUnavailableError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
-from ..types.create_assignment_response import CreateAssignmentResponse
+from ..types.set_usage_response import SetUsageResponse
+from ..types.usage_response import UsageResponse
 from pydantic import ValidationError
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
 
 
-class RawAssignmentsClient:
+class RawUsageClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    def create_assignment(
-        self, *, plan_key: str, subject_id: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[CreateAssignmentResponse]:
+    def set_usage(
+        self, subject_id: str, feature_code: str, *, value: int, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[SetUsageResponse]:
         """
-        Assigns a plan to a subject. Validates that the plan key exists in the tenant's
-        schema, writes the assignment to the store, and invalidates the subject's cache entries.
+        Sets the absolute value of a stateful feature counter. Enforces limits at write time:
+        if the requested value exceeds the configured max, the request is rejected with 409.
+        Writes directly to cache (bypassing the increment buffer) and publishes a `UsageSetEvent`
+        to SQS for durable persistence.
 
-        - If the request body is missing or malformed: returns 400.
-        - If the subject_id exceeds 256 characters: returns 400.
-        - If the tenant has no schema uploaded: returns 422.
-        - If the plan key does not exist in the schema: returns 422.
-        - If a store or cache error occurs: returns 500.
-        - On success: returns 201 with the assignment details.
+        - If `subject_id` or `feature_code` is empty: returns 400.
+        - If `feature_code` not found in schema: returns 404.
+        - If feature type is not Stateful: returns 422.
+        - If subject has no plan assigned: returns 409 with reason "no_plan".
+        - If value exceeds max: returns 409 with reason "value exceeds stateful feature limit".
+        - If cache write fails: returns 503.
+        - On SQS publish failure: still returns 200 (fire-and-forget).
+        - On success: returns 200 with accepted response.
 
         Parameters
         ----------
-        plan_key : str
-
         subject_id : str
+            The subject whose counter is being set
+
+        feature_code : str
+            The stateful feature code (e.g., "seats")
+
+        value : int
+            The absolute counter value to set.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        HttpResponse[CreateAssignmentResponse]
-            Assignment created
+        HttpResponse[SetUsageResponse]
+            Counter set successfully
         """
         _response = self._client_wrapper.httpx_client.request(
-            "assignments",
-            method="POST",
+            f"subjects/{encode_path_param(subject_id)}/usage/{encode_path_param(feature_code)}",
+            method="PUT",
             json={
-                "plan_key": plan_key,
-                "subject_id": subject_id,
+                "value": value,
             },
             headers={
                 "content-type": "application/json",
@@ -70,9 +80,9 @@ class RawAssignmentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    CreateAssignmentResponse,
+                    SetUsageResponse,
                     parse_obj_as(
-                        type_=CreateAssignmentResponse,  # type: ignore
+                        type_=SetUsageResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -88,8 +98,8 @@ class RawAssignmentsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 401:
-                raise UnauthorizedError(
+            if _response.status_code == 404:
+                raise NotFoundError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -99,8 +109,8 @@ class RawAssignmentsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 403:
-                raise ForbiddenError(
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -121,8 +131,8 @@ class RawAssignmentsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 500:
-                raise InternalServerError(
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -141,62 +151,52 @@ class RawAssignmentsClient:
             )
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def delete_assignment(
-        self, subject_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[None]:
+    def get_usage(
+        self, *, per_subject: typing.Optional[bool] = None, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[UsageResponse]:
         """
-        Removes the subject assignment from the store and invalidates the subject's
-        cache entries. Tenant is resolved from `X-Api-Key` via the auth middleware.
+        Returns aggregated usage statistics for the authenticated tenant.
+        Includes per-feature consumption totals and cadence window metadata.
 
-        - If subject_id is empty: returns 400.
-        - If a store error occurs: returns 500.
-        - On success: returns 204 No Content (regardless of whether the assignment existed).
-          The `max_subjects` self-metering counter is only decremented when an
-          assignment actually existed, so repeated or no-op deletes cannot drive
-          the counter negative.
+        Plan-specific fields (limit, cadence, overage, warning) are intentionally
+        omitted from the aggregated view because they are per-plan values that
+        cannot be meaningfully resolved at the tenant level (see issue #224).
+
+        When `?per_subject=true` is passed, returns per-subject usage breakdowns
+        including each subject's feature counters with plan-specific limits
+        resolved from the schema.
 
         Parameters
         ----------
-        subject_id : str
-            The subject identifier to unassign
+        per_subject : typing.Optional[bool]
+            When true, returns per-subject usage breakdowns
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        HttpResponse[None]
+        HttpResponse[UsageResponse]
+            Usage statistics
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"assignments/{encode_path_param(subject_id)}",
-            method="DELETE",
+            "usage",
+            method="GET",
+            params={
+                "per_subject": per_subject,
+            },
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Any,
-                        parse_obj_as(
-                            type_=typing.Any,  # type: ignore
-                            object_=_response.json(),
-                        ),
+                _data = typing.cast(
+                    UsageResponse,
+                    parse_obj_as(
+                        type_=UsageResponse,  # type: ignore
+                        object_=_response.json(),
                     ),
                 )
-            if _response.status_code == 401:
-                raise UnauthorizedError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Any,
-                        parse_obj_as(
-                            type_=typing.Any,  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
+                return HttpResponse(response=_response, data=_data)
             if _response.status_code == 500:
                 raise InternalServerError(
                     headers=dict(_response.headers),
@@ -218,44 +218,52 @@ class RawAssignmentsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
 
-class AsyncRawAssignmentsClient:
+class AsyncRawUsageClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    async def create_assignment(
-        self, *, plan_key: str, subject_id: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[CreateAssignmentResponse]:
+    async def set_usage(
+        self, subject_id: str, feature_code: str, *, value: int, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[SetUsageResponse]:
         """
-        Assigns a plan to a subject. Validates that the plan key exists in the tenant's
-        schema, writes the assignment to the store, and invalidates the subject's cache entries.
+        Sets the absolute value of a stateful feature counter. Enforces limits at write time:
+        if the requested value exceeds the configured max, the request is rejected with 409.
+        Writes directly to cache (bypassing the increment buffer) and publishes a `UsageSetEvent`
+        to SQS for durable persistence.
 
-        - If the request body is missing or malformed: returns 400.
-        - If the subject_id exceeds 256 characters: returns 400.
-        - If the tenant has no schema uploaded: returns 422.
-        - If the plan key does not exist in the schema: returns 422.
-        - If a store or cache error occurs: returns 500.
-        - On success: returns 201 with the assignment details.
+        - If `subject_id` or `feature_code` is empty: returns 400.
+        - If `feature_code` not found in schema: returns 404.
+        - If feature type is not Stateful: returns 422.
+        - If subject has no plan assigned: returns 409 with reason "no_plan".
+        - If value exceeds max: returns 409 with reason "value exceeds stateful feature limit".
+        - If cache write fails: returns 503.
+        - On SQS publish failure: still returns 200 (fire-and-forget).
+        - On success: returns 200 with accepted response.
 
         Parameters
         ----------
-        plan_key : str
-
         subject_id : str
+            The subject whose counter is being set
+
+        feature_code : str
+            The stateful feature code (e.g., "seats")
+
+        value : int
+            The absolute counter value to set.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        AsyncHttpResponse[CreateAssignmentResponse]
-            Assignment created
+        AsyncHttpResponse[SetUsageResponse]
+            Counter set successfully
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "assignments",
-            method="POST",
+            f"subjects/{encode_path_param(subject_id)}/usage/{encode_path_param(feature_code)}",
+            method="PUT",
             json={
-                "plan_key": plan_key,
-                "subject_id": subject_id,
+                "value": value,
             },
             headers={
                 "content-type": "application/json",
@@ -266,9 +274,9 @@ class AsyncRawAssignmentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    CreateAssignmentResponse,
+                    SetUsageResponse,
                     parse_obj_as(
-                        type_=CreateAssignmentResponse,  # type: ignore
+                        type_=SetUsageResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -284,8 +292,8 @@ class AsyncRawAssignmentsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 401:
-                raise UnauthorizedError(
+            if _response.status_code == 404:
+                raise NotFoundError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -295,8 +303,8 @@ class AsyncRawAssignmentsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 403:
-                raise ForbiddenError(
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -317,8 +325,8 @@ class AsyncRawAssignmentsClient:
                         ),
                     ),
                 )
-            if _response.status_code == 500:
-                raise InternalServerError(
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -337,62 +345,52 @@ class AsyncRawAssignmentsClient:
             )
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def delete_assignment(
-        self, subject_id: str, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[None]:
+    async def get_usage(
+        self, *, per_subject: typing.Optional[bool] = None, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[UsageResponse]:
         """
-        Removes the subject assignment from the store and invalidates the subject's
-        cache entries. Tenant is resolved from `X-Api-Key` via the auth middleware.
+        Returns aggregated usage statistics for the authenticated tenant.
+        Includes per-feature consumption totals and cadence window metadata.
 
-        - If subject_id is empty: returns 400.
-        - If a store error occurs: returns 500.
-        - On success: returns 204 No Content (regardless of whether the assignment existed).
-          The `max_subjects` self-metering counter is only decremented when an
-          assignment actually existed, so repeated or no-op deletes cannot drive
-          the counter negative.
+        Plan-specific fields (limit, cadence, overage, warning) are intentionally
+        omitted from the aggregated view because they are per-plan values that
+        cannot be meaningfully resolved at the tenant level (see issue #224).
+
+        When `?per_subject=true` is passed, returns per-subject usage breakdowns
+        including each subject's feature counters with plan-specific limits
+        resolved from the schema.
 
         Parameters
         ----------
-        subject_id : str
-            The subject identifier to unassign
+        per_subject : typing.Optional[bool]
+            When true, returns per-subject usage breakdowns
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        AsyncHttpResponse[None]
+        AsyncHttpResponse[UsageResponse]
+            Usage statistics
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"assignments/{encode_path_param(subject_id)}",
-            method="DELETE",
+            "usage",
+            method="GET",
+            params={
+                "per_subject": per_subject,
+            },
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Any,
-                        parse_obj_as(
-                            type_=typing.Any,  # type: ignore
-                            object_=_response.json(),
-                        ),
+                _data = typing.cast(
+                    UsageResponse,
+                    parse_obj_as(
+                        type_=UsageResponse,  # type: ignore
+                        object_=_response.json(),
                     ),
                 )
-            if _response.status_code == 401:
-                raise UnauthorizedError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Any,
-                        parse_obj_as(
-                            type_=typing.Any,  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
+                return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 500:
                 raise InternalServerError(
                     headers=dict(_response.headers),

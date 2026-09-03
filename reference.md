@@ -91,6 +91,95 @@ client.addons.attach_addon(
 </dl>
 </details>
 
+<details><summary><code>client.addons.<a href="src/billkit/addons/client.py">detach_addon</a>(...)</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Removes the given add-on from the subject's existing assignment in the store
+and invalidates the subject's cache entries. Tenant is resolved from
+`X-Api-Key` via the auth middleware.
+
+- If subject_id or addon_key is empty: returns 400.
+- If the subject has no existing assignment: returns 404.
+- If a store error occurs: returns 500.
+- On success: returns 204 No Content, whether or not the add-on was
+  actually attached (idempotent, matching `DELETE /assignments/{subject_id}`).
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.addons.detach_addon(
+    subject_id="subject_id",
+    addon_key="addon_key",
+)
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**subject_id:** `str` — The subject identifier
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**addon_key:** `str` — The add-on key to detach
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
 ## Assignments
 <details><summary><code>client.assignments.<a href="src/billkit/assignments/client.py">create_assignment</a>(...) -> CreateAssignmentResponse</code></summary>
 <dl>
@@ -199,6 +288,9 @@ cache entries. Tenant is resolved from `X-Api-Key` via the auth middleware.
 - If subject_id is empty: returns 400.
 - If a store error occurs: returns 500.
 - On success: returns 204 No Content (regardless of whether the assignment existed).
+  The `max_subjects` self-metering counter is only decremented when an
+  assignment actually existed, so repeated or no-op deletes cannot drive
+  the counter negative.
 </dd>
 </dl>
 </dd>
@@ -259,6 +351,110 @@ client.assignments.delete_assignment(
 </details>
 
 ## Billing
+<details><summary><code>client.billing.<a href="src/billkit/billing/client.py">change_plan</a>(...) -> ChangePlanResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Allows a portal-authenticated subject to switch their plan. This is the
+immediate-switch path only: it handles the case where billing is not configured
+in the schema, or where the old and new plan have equal prices (lateral move).
+
+Upgrade/downgrade branches (with proration math and Stripe charges) are
+implemented in a later task and will extend this handler.
+
+## Authentication
+Requires portal JWT (Bearer token). The subject identity comes from
+the `PortalContext` extension (injected by `portal_auth_middleware`).
+
+## Request Body
+```json
+{ "plan_key": "pro" }
+```
+
+## Response (200)
+```json
+{
+  "subject_id": "user_123",
+  "previous_plan_key": "starter",
+  "new_plan_key": "pro",
+  "changed_at": "2024-01-15T12:30:00Z",
+  "effective": "immediate",
+  "proration_charge_cents": 0
+}
+```
+
+## Errors
+- 400: Empty `plan_key` or already on the requested plan
+- 401: Missing or invalid portal token
+- 404: Subject not found or plan key not in schema
+- 500: Internal error
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.billing.change_plan(
+    plan_key="plan_key",
+)
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**plan_key:** `str` — The plan key to switch to.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
 <details><summary><code>client.billing.<a href="src/billkit/billing/client.py">create_portal_token</a>(...) -> CreatePortalTokenResponse</code></summary>
 <dl>
 <dd>
@@ -337,6 +533,89 @@ client.billing.create_portal_token(
 <dd>
 
 **subject_id:** `str` — The subject (end user) to generate a portal token for.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+<details><summary><code>client.billing.<a href="src/billkit/billing/client.py">portal_list_invoices</a>(...) -> PortalListInvoicesResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Scoped to the subject identified in the portal token. Cannot see other subjects' invoices.
+Supports cursor-based pagination with portal-specific limits (default 50, max 200).
+
+Query parameters:
+- `limit` — maximum number of items per page (1–200, default 50)
+- `cursor` — opaque pagination cursor from a previous response
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.billing.portal_list_invoices()
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**limit:** `typing.Optional[int]` — Maximum number of items to return per page.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**cursor:** `typing.Optional[str]` — Opaque pagination cursor from a previous response's `next_cursor` field.
     
 </dd>
 </dl>
@@ -538,7 +817,189 @@ client.contracts.apply_contract(
 </dl>
 </details>
 
+<details><summary><code>client.contracts.<a href="src/billkit/contracts/client.py">detach_contract</a>(...)</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Clears any custom contract from the subject's existing assignment in the
+store and invalidates the subject's cache entries. Tenant is resolved from
+`X-Api-Key` via the auth middleware.
+
+- If subject_id is empty: returns 400.
+- If the subject has no existing assignment: returns 404.
+- If a store error occurs: returns 500.
+- On success: returns 204 No Content, whether or not a contract was
+  actually applied (idempotent, matching `DELETE /assignments/{subject_id}`).
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.contracts.detach_contract(
+    subject_id="subject_id",
+)
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**subject_id:** `str` — The subject identifier
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
 ## Invoices
+<details><summary><code>client.invoices.<a href="src/billkit/invoices/client.py">list_invoice_failures</a>(...) -> ListInvoiceFailuresResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Lists invoice-failure markers for the authenticated tenant, most recent
+failure first, with optional filtering by `subject_id` and `exhausted`.
+Supports cursor-based pagination.
+
+Query parameters:
+- `subject_id` — filter by subject
+- `exhausted` — `true`/`false` to filter by retry-budget status
+- `limit` — maximum number of items per page (1–1000, default 100)
+- `cursor` — opaque pagination cursor from a previous response
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.invoices.list_invoice_failures()
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**subject_id:** `typing.Optional[str]` — Filter by subject ID
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**exhausted:** `typing.Optional[bool]` — Filter by retry-budget status (true = exhausted)
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**limit:** `typing.Optional[int]` — Maximum items per page (1–1000, default 100)
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**cursor:** `typing.Optional[str]` — Opaque pagination cursor from previous response
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
 <details><summary><code>client.invoices.<a href="src/billkit/invoices/client.py">list_invoices</a>(...) -> ListInvoicesResponse</code></summary>
 <dl>
 <dd>
@@ -552,13 +1013,18 @@ client.contracts.apply_contract(
 <dd>
 
 Lists end-user invoices for the authenticated tenant with optional filtering
-by subject_id, status, and date range.
+by subject_id, status, and date range. Supports cursor-based pagination.
 
 Query parameters:
 - `subject_id` — filter by subject
-- `status` — filter by invoice status (open, paid, past_due, uncollectible)
-- `start_date` — ISO 8601 datetime; only invoices overlapping this date or later
-- `end_date` — ISO 8601 datetime; only invoices overlapping this date or earlier
+- `status` — filter by invoice status (open, paid, past_due, uncollectible).
+  Any other value is rejected with a 400.
+- `start_date` — RFC 3339 datetime; only invoices overlapping this date or later.
+  Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+- `end_date` — RFC 3339 datetime; only invoices overlapping this date or earlier.
+  Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+- `limit` — maximum number of items per page (1–1000, default 100)
+- `cursor` — opaque pagination cursor from a previous response
 </dd>
 </dl>
 </dd>
@@ -612,7 +1078,7 @@ client.invoices.list_invoices()
 <dl>
 <dd>
 
-**start_date:** `typing.Optional[str]` — ISO 8601 start date filter
+**start_date:** `typing.Optional[str]` — RFC 3339 start date filter
     
 </dd>
 </dl>
@@ -620,10 +1086,156 @@ client.invoices.list_invoices()
 <dl>
 <dd>
 
-**end_date:** `typing.Optional[str]` — ISO 8601 end date filter
+**end_date:** `typing.Optional[str]` — RFC 3339 end date filter
     
 </dd>
 </dl>
+
+<dl>
+<dd>
+
+**limit:** `typing.Optional[int]` — Maximum items per page (1–1000, default 100)
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**cursor:** `typing.Optional[str]` — Opaque pagination cursor from previous response
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+<details><summary><code>client.invoices.<a href="src/billkit/invoices/client.py">list_platform_invoices</a>() -> ListPlatformInvoicesResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Lists Billkit's platform invoices for the authenticated tenant (charges from
+Billkit to the tenant). Returns all platform invoices sorted by `created_at`
+descending (most recent first).
+
+Platform invoices are bounded (~12-24 per year) so no pagination is needed.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.invoices.list_platform_invoices()
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+<details><summary><code>client.invoices.<a href="src/billkit/invoices/client.py">get_revenue</a>() -> RevenueResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Aggregates revenue metrics from all end-user invoices for the authenticated
+tenant. Returns totals and a month-over-month breakdown grouped by
+`billing_period_end`.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.invoices.get_revenue()
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
 
 <dl>
 <dd>
@@ -925,7 +1537,7 @@ client.api_keys.rotate_key()
 </dl>
 </details>
 
-<details><summary><code>client.api_keys.<a href="src/billkit/api_keys/client.py">delete_key</a>(...)</code></summary>
+<details><summary><code>client.api_keys.<a href="src/billkit/api_keys/client.py">delete_key</a>(...) -> RevokeKeyResponse</code></summary>
 <dl>
 <dd>
 
@@ -1072,7 +1684,7 @@ client.pricing.get_pricing()
 </details>
 
 ## Schema
-<details><summary><code>client.schema.<a href="src/billkit/schema/client.py">get_schema</a>() -> str</code></summary>
+<details><summary><code>client.schema.<a href="src/billkit/schema/client.py">get_schema</a>(...) -> str</code></summary>
 <dl>
 <dd>
 
@@ -1087,7 +1699,11 @@ client.pricing.get_pricing()
 Retrieves the tenant's own schema document from the store.
 Tenant is resolved from `X-Api-Key` via the auth middleware.
 
-- If the tenant has a schema: returns 200 with the schema document body (as stored).
+Accepts an optional `?format=yaml` or `?format=json` query parameter.
+Defaults to JSON (the canonical storage format). When `yaml` is requested,
+the stored JSON is converted to YAML before returning.
+
+- If the tenant has a schema: returns 200 with the schema document body.
 - If the tenant has no schema: returns 404 with `{ "error": "schema not found" }`.
 - If a store error occurs: returns 500 with `{ "error": "internal error" }`.
 </dd>
@@ -1127,6 +1743,14 @@ client.schema.get_schema()
 <dl>
 <dd>
 
+**format:** `typing.Optional[GetSchemaRequestFormat]` — Output format: "json" (default) or "yaml".
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
     
 </dd>
@@ -1139,7 +1763,7 @@ client.schema.get_schema()
 </dl>
 </details>
 
-<details><summary><code>client.schema.<a href="src/billkit/schema/client.py">put_schema</a>() -> ValidationErrorResponse</code></summary>
+<details><summary><code>client.schema.<a href="src/billkit/schema/client.py">put_schema</a>(...) -> ValidationErrorResponse</code></summary>
 <dl>
 <dd>
 
@@ -1154,8 +1778,17 @@ client.schema.get_schema()
 Validates, persists to store, and invalidates all tenant cache entries.
 Tenant is resolved from `X-Api-Key` via the auth middleware.
 
+Before persisting, the new document is checked for referential integrity
+against the tenant's existing subject assignments: if any assignment
+references a `plan_key`, `contract_key`, or add-on key that would no
+longer exist in the new document, the upload is rejected (422) so that
+assignments never silently go stale. Pass `?force=true` to bypass this
+check and persist anyway (e.g. when reassigning affected subjects out of
+band).
+
 - If the body is empty: returns 400.
 - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }` (not persisted).
+- If persisting would orphan subject assignments and `force` is not set: returns 422 with `{ "valid": false, "errors": [...] }` (not persisted).
 - If the document is valid: persists to store, invalidates cache, returns 200 with `{ "valid": true, "errors": [] }`.
 - If a store or cache error occurs: returns 500.
 </dd>
@@ -1195,6 +1828,19 @@ client.schema.put_schema()
 <dl>
 <dd>
 
+**force:** `typing.Optional[bool]` 
+
+When `true`, bypass the referential-integrity check against existing
+subject assignments and persist the schema even if doing so would orphan
+a plan, contract, or add-on key that subjects are still assigned to.
+Defaults to `false`.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
     
 </dd>
@@ -1207,7 +1853,7 @@ client.schema.put_schema()
 </dl>
 </details>
 
-<details><summary><code>client.schema.<a href="src/billkit/schema/client.py">validate_schema</a>() -> ValidationErrorResponse</code></summary>
+<details><summary><code>client.schema.<a href="src/billkit/schema/client.py">validate_schema</a>(...) -> ValidationErrorResponse</code></summary>
 <dl>
 <dd>
 
@@ -1223,7 +1869,12 @@ Accepts a raw schema document body (YAML or JSON), runs the full validator
 (structural + semantic), and returns a `ValidationErrorResponse` without
 persisting anything.
 
-- If the document is valid: returns 200 with `{ "valid": true, "errors": [] }`.
+Accepts an optional `?format=json` or `?format=yaml` query parameter.
+When provided and the schema is valid, the response includes a `document`
+field containing the schema serialized in the requested format.
+Defaults to no document in the response (backward-compatible).
+
+- If the document is valid: returns 200 with `{ "valid": true, "errors": [] }` (and optionally `"document": "..."`).
 - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }`.
 - If the body is empty: returns 400.
 
@@ -1266,6 +1917,14 @@ client.schema.validate_schema()
 <dl>
 <dd>
 
+**format:** `typing.Optional[ValidateSchemaRequestFormat]` — Output format: "json" (default) or "yaml".
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
     
 </dd>
@@ -1279,7 +1938,7 @@ client.schema.validate_schema()
 </details>
 
 ## Subjects
-<details><summary><code>client.subjects.<a href="src/billkit/subjects/client.py">list_subjects</a>() -> SubjectsResponse</code></summary>
+<details><summary><code>client.subjects.<a href="src/billkit/subjects/client.py">list_subjects</a>(...) -> SubjectsResponse</code></summary>
 <dl>
 <dd>
 
@@ -1335,6 +1994,22 @@ client.subjects.list_subjects()
 <dl>
 <dd>
 
+**limit:** `typing.Optional[int]` — Maximum number of items to return per page.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**cursor:** `typing.Optional[str]` — Opaque pagination cursor from a previous response's `next_cursor` field.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
 **request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
     
 </dd>
@@ -1366,8 +2041,14 @@ on the connected account and marks the subject as "billable".
 If the subject already exists (re-registration), updates the Stripe Customer's
 email/name rather than creating a duplicate.
 
+`plan_key` is validated against the tenant's schema, mirroring `POST /assignments`:
+- If `plan_key` is provided but does not exist in the schema: returns 422.
+- If `plan_key` is omitted, it defaults to the schema's `default_plan` (not the
+  literal string `"free"`). If the schema defines no `default_plan`: returns 422.
+- If the tenant has no schema uploaded at all: returns 422.
+
 - If subject_id is missing or too long: returns 400.
-- If the subject already exists: updates email/name/Stripe Customer (idempotent).
+- If the subject already exists: updates email/name/plan_key/Stripe Customer (idempotent).
 - If no Stripe Connect account is active: subject is stored without Stripe Customer.
 - If Stripe API fails: returns 502 (subject is NOT partially created).
 - On success: returns 201 (new) or 200 (re-registration).
@@ -1568,6 +2249,188 @@ client.subjects.get_subject(
 <dd>
 
 **subject_id:** `str` — The subject identifier
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+## Usage
+<details><summary><code>client.usage.<a href="src/billkit/usage/client.py">set_usage</a>(...) -> SetUsageResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Sets the absolute value of a stateful feature counter. Enforces limits at write time:
+if the requested value exceeds the configured max, the request is rejected with 409.
+Writes directly to cache (bypassing the increment buffer) and publishes a `UsageSetEvent`
+to SQS for durable persistence.
+
+- If `subject_id` or `feature_code` is empty: returns 400.
+- If `feature_code` not found in schema: returns 404.
+- If feature type is not Stateful: returns 422.
+- If subject has no plan assigned: returns 409 with reason "no_plan".
+- If value exceeds max: returns 409 with reason "value exceeds stateful feature limit".
+- If cache write fails: returns 503.
+- On SQS publish failure: still returns 200 (fire-and-forget).
+- On success: returns 200 with accepted response.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.usage.set_usage(
+    subject_id="subject_id",
+    feature_code="feature_code",
+    value=1000000,
+)
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**subject_id:** `str` — The subject whose counter is being set
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**feature_code:** `str` — The stateful feature code (e.g., "seats")
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**value:** `int` — The absolute counter value to set.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+<details><summary><code>client.usage.<a href="src/billkit/usage/client.py">get_usage</a>(...) -> UsageResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Returns aggregated usage statistics for the authenticated tenant.
+Includes per-feature consumption totals and cadence window metadata.
+
+Plan-specific fields (limit, cadence, overage, warning) are intentionally
+omitted from the aggregated view because they are per-plan values that
+cannot be meaningfully resolved at the tenant level (see issue #224).
+
+When `?per_subject=true` is passed, returns per-subject usage breakdowns
+including each subject's feature counters with plan-specific limits
+resolved from the schema.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.usage.get_usage()
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**per_subject:** `typing.Optional[bool]` — When true, returns per-subject usage breakdowns
     
 </dd>
 </dl>

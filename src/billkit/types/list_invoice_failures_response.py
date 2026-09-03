@@ -4,22 +4,24 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .invoice_failure_item import InvoiceFailureItem
 
 
-class KeyListItem(UniversalBaseModel):
+class ListInvoiceFailuresResponse(UniversalBaseModel):
     """
-    A single API key in the list response (key is masked).
-
-    Note: there is intentionally no `last_used_at` field. Tracking key usage
-    requires a throttled write on the auth hot path (see #230) and is deferred
-    post-MVP — the field was previously always `None`/absent, which is worse
-    than not advertising it at all.
+    Response body for `GET /invoice-failures`.
     """
 
-    created_at: str
-    key_id: str
-    name: str
-    prefix: str
+    failures: typing.List[InvoiceFailureItem]
+    has_more: bool = pydantic.Field()
+    """
+    Whether more results exist beyond this page.
+    """
+
+    next_cursor: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Opaque cursor for the next page. Null/absent on the last page.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

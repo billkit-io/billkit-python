@@ -10,17 +10,127 @@ from ..core.jsonable_encoder import encode_path_param
 from ..core.parse_error import ParsingError
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
+from ..errors.bad_request_error import BadRequestError
 from ..errors.internal_server_error import InternalServerError
 from ..errors.not_found_error import NotFoundError
+from ..errors.unauthorized_error import UnauthorizedError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.invoice_preview_response import InvoicePreviewResponse
+from ..types.list_invoice_failures_response import ListInvoiceFailuresResponse
 from ..types.list_invoices_response import ListInvoicesResponse
+from ..types.list_platform_invoices_response import ListPlatformInvoicesResponse
+from ..types.revenue_response import RevenueResponse
 from pydantic import ValidationError
 
 
 class RawInvoicesClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def list_invoice_failures(
+        self,
+        *,
+        subject_id: typing.Optional[str] = None,
+        exhausted: typing.Optional[bool] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ListInvoiceFailuresResponse]:
+        """
+        Lists invoice-failure markers for the authenticated tenant, most recent
+        failure first, with optional filtering by `subject_id` and `exhausted`.
+        Supports cursor-based pagination.
+
+        Query parameters:
+        - `subject_id` — filter by subject
+        - `exhausted` — `true`/`false` to filter by retry-budget status
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        subject_id : typing.Optional[str]
+            Filter by subject ID
+
+        exhausted : typing.Optional[bool]
+            Filter by retry-budget status (true = exhausted)
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ListInvoiceFailuresResponse]
+            List of invoice-failure markers
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "invoice-failures",
+            method="GET",
+            params={
+                "subject_id": subject_id,
+                "exhausted": exhausted,
+                "limit": limit,
+                "cursor": cursor,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ListInvoiceFailuresResponse,
+                    parse_obj_as(
+                        type_=ListInvoiceFailuresResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def list_invoices(
         self,
@@ -29,17 +139,24 @@ class RawInvoicesClient:
         status: typing.Optional[str] = None,
         start_date: typing.Optional[str] = None,
         end_date: typing.Optional[str] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ListInvoicesResponse]:
         """
         Lists end-user invoices for the authenticated tenant with optional filtering
-        by subject_id, status, and date range.
+        by subject_id, status, and date range. Supports cursor-based pagination.
 
         Query parameters:
         - `subject_id` — filter by subject
-        - `status` — filter by invoice status (open, paid, past_due, uncollectible)
-        - `start_date` — ISO 8601 datetime; only invoices overlapping this date or later
-        - `end_date` — ISO 8601 datetime; only invoices overlapping this date or earlier
+        - `status` — filter by invoice status (open, paid, past_due, uncollectible).
+          Any other value is rejected with a 400.
+        - `start_date` — RFC 3339 datetime; only invoices overlapping this date or later.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `end_date` — RFC 3339 datetime; only invoices overlapping this date or earlier.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
 
         Parameters
         ----------
@@ -50,10 +167,16 @@ class RawInvoicesClient:
             Filter by status (open, paid, past_due, uncollectible)
 
         start_date : typing.Optional[str]
-            ISO 8601 start date filter
+            RFC 3339 start date filter
 
         end_date : typing.Optional[str]
-            ISO 8601 end date filter
+            RFC 3339 end date filter
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -71,6 +194,8 @@ class RawInvoicesClient:
                 "status": status,
                 "start_date": start_date,
                 "end_date": end_date,
+                "limit": limit,
+                "cursor": cursor,
             },
             request_options=request_options,
         )
@@ -84,6 +209,156 @@ class RawInvoicesClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def list_platform_invoices(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[ListPlatformInvoicesResponse]:
+        """
+        Lists Billkit's platform invoices for the authenticated tenant (charges from
+        Billkit to the tenant). Returns all platform invoices sorted by `created_at`
+        descending (most recent first).
+
+        Platform invoices are bounded (~12-24 per year) so no pagination is needed.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ListPlatformInvoicesResponse]
+            List of platform invoices
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "invoices/platform",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ListPlatformInvoicesResponse,
+                    parse_obj_as(
+                        type_=ListPlatformInvoicesResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_revenue(self, *, request_options: typing.Optional[RequestOptions] = None) -> HttpResponse[RevenueResponse]:
+        """
+        Aggregates revenue metrics from all end-user invoices for the authenticated
+        tenant. Returns totals and a month-over-month breakdown grouped by
+        `billing_period_end`.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[RevenueResponse]
+            Revenue metrics
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "invoices/revenue",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    RevenueResponse,
+                    parse_obj_as(
+                        type_=RevenueResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 500:
                 raise InternalServerError(
                     headers=dict(_response.headers),
@@ -144,6 +419,17 @@ class RawInvoicesClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -191,6 +477,111 @@ class AsyncRawInvoicesClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    async def list_invoice_failures(
+        self,
+        *,
+        subject_id: typing.Optional[str] = None,
+        exhausted: typing.Optional[bool] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ListInvoiceFailuresResponse]:
+        """
+        Lists invoice-failure markers for the authenticated tenant, most recent
+        failure first, with optional filtering by `subject_id` and `exhausted`.
+        Supports cursor-based pagination.
+
+        Query parameters:
+        - `subject_id` — filter by subject
+        - `exhausted` — `true`/`false` to filter by retry-budget status
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        subject_id : typing.Optional[str]
+            Filter by subject ID
+
+        exhausted : typing.Optional[bool]
+            Filter by retry-budget status (true = exhausted)
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ListInvoiceFailuresResponse]
+            List of invoice-failure markers
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "invoice-failures",
+            method="GET",
+            params={
+                "subject_id": subject_id,
+                "exhausted": exhausted,
+                "limit": limit,
+                "cursor": cursor,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ListInvoiceFailuresResponse,
+                    parse_obj_as(
+                        type_=ListInvoiceFailuresResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def list_invoices(
         self,
         *,
@@ -198,17 +589,24 @@ class AsyncRawInvoicesClient:
         status: typing.Optional[str] = None,
         start_date: typing.Optional[str] = None,
         end_date: typing.Optional[str] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ListInvoicesResponse]:
         """
         Lists end-user invoices for the authenticated tenant with optional filtering
-        by subject_id, status, and date range.
+        by subject_id, status, and date range. Supports cursor-based pagination.
 
         Query parameters:
         - `subject_id` — filter by subject
-        - `status` — filter by invoice status (open, paid, past_due, uncollectible)
-        - `start_date` — ISO 8601 datetime; only invoices overlapping this date or later
-        - `end_date` — ISO 8601 datetime; only invoices overlapping this date or earlier
+        - `status` — filter by invoice status (open, paid, past_due, uncollectible).
+          Any other value is rejected with a 400.
+        - `start_date` — RFC 3339 datetime; only invoices overlapping this date or later.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `end_date` — RFC 3339 datetime; only invoices overlapping this date or earlier.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
 
         Parameters
         ----------
@@ -219,10 +617,16 @@ class AsyncRawInvoicesClient:
             Filter by status (open, paid, past_due, uncollectible)
 
         start_date : typing.Optional[str]
-            ISO 8601 start date filter
+            RFC 3339 start date filter
 
         end_date : typing.Optional[str]
-            ISO 8601 end date filter
+            RFC 3339 end date filter
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -240,6 +644,8 @@ class AsyncRawInvoicesClient:
                 "status": status,
                 "start_date": start_date,
                 "end_date": end_date,
+                "limit": limit,
+                "cursor": cursor,
             },
             request_options=request_options,
         )
@@ -253,6 +659,158 @@ class AsyncRawInvoicesClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def list_platform_invoices(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[ListPlatformInvoicesResponse]:
+        """
+        Lists Billkit's platform invoices for the authenticated tenant (charges from
+        Billkit to the tenant). Returns all platform invoices sorted by `created_at`
+        descending (most recent first).
+
+        Platform invoices are bounded (~12-24 per year) so no pagination is needed.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ListPlatformInvoicesResponse]
+            List of platform invoices
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "invoices/platform",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ListPlatformInvoicesResponse,
+                    parse_obj_as(
+                        type_=ListPlatformInvoicesResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 500:
+                raise InternalServerError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_revenue(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[RevenueResponse]:
+        """
+        Aggregates revenue metrics from all end-user invoices for the authenticated
+        tenant. Returns totals and a month-over-month breakdown grouped by
+        `billing_period_end`.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[RevenueResponse]
+            Revenue metrics
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "invoices/revenue",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    RevenueResponse,
+                    parse_obj_as(
+                        type_=RevenueResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 500:
                 raise InternalServerError(
                     headers=dict(_response.headers),
@@ -313,6 +871,17 @@ class AsyncRawInvoicesClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),

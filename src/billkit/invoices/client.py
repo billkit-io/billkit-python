@@ -5,7 +5,10 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.invoice_preview_response import InvoicePreviewResponse
+from ..types.list_invoice_failures_response import ListInvoiceFailuresResponse
 from ..types.list_invoices_response import ListInvoicesResponse
+from ..types.list_platform_invoices_response import ListPlatformInvoicesResponse
+from ..types.revenue_response import RevenueResponse
 from .raw_client import AsyncRawInvoicesClient, RawInvoicesClient
 
 
@@ -24,6 +27,63 @@ class InvoicesClient:
         """
         return self._raw_client
 
+    def list_invoice_failures(
+        self,
+        *,
+        subject_id: typing.Optional[str] = None,
+        exhausted: typing.Optional[bool] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ListInvoiceFailuresResponse:
+        """
+        Lists invoice-failure markers for the authenticated tenant, most recent
+        failure first, with optional filtering by `subject_id` and `exhausted`.
+        Supports cursor-based pagination.
+
+        Query parameters:
+        - `subject_id` — filter by subject
+        - `exhausted` — `true`/`false` to filter by retry-budget status
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        subject_id : typing.Optional[str]
+            Filter by subject ID
+
+        exhausted : typing.Optional[bool]
+            Filter by retry-budget status (true = exhausted)
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ListInvoiceFailuresResponse
+            List of invoice-failure markers
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.invoices.list_invoice_failures()
+        """
+        _response = self._raw_client.list_invoice_failures(
+            subject_id=subject_id, exhausted=exhausted, limit=limit, cursor=cursor, request_options=request_options
+        )
+        return _response.data
+
     def list_invoices(
         self,
         *,
@@ -31,17 +91,24 @@ class InvoicesClient:
         status: typing.Optional[str] = None,
         start_date: typing.Optional[str] = None,
         end_date: typing.Optional[str] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ListInvoicesResponse:
         """
         Lists end-user invoices for the authenticated tenant with optional filtering
-        by subject_id, status, and date range.
+        by subject_id, status, and date range. Supports cursor-based pagination.
 
         Query parameters:
         - `subject_id` — filter by subject
-        - `status` — filter by invoice status (open, paid, past_due, uncollectible)
-        - `start_date` — ISO 8601 datetime; only invoices overlapping this date or later
-        - `end_date` — ISO 8601 datetime; only invoices overlapping this date or earlier
+        - `status` — filter by invoice status (open, paid, past_due, uncollectible).
+          Any other value is rejected with a 400.
+        - `start_date` — RFC 3339 datetime; only invoices overlapping this date or later.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `end_date` — RFC 3339 datetime; only invoices overlapping this date or earlier.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
 
         Parameters
         ----------
@@ -52,10 +119,16 @@ class InvoicesClient:
             Filter by status (open, paid, past_due, uncollectible)
 
         start_date : typing.Optional[str]
-            ISO 8601 start date filter
+            RFC 3339 start date filter
 
         end_date : typing.Optional[str]
-            ISO 8601 end date filter
+            RFC 3339 end date filter
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -80,8 +153,72 @@ class InvoicesClient:
             status=status,
             start_date=start_date,
             end_date=end_date,
+            limit=limit,
+            cursor=cursor,
             request_options=request_options,
         )
+        return _response.data
+
+    def list_platform_invoices(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> ListPlatformInvoicesResponse:
+        """
+        Lists Billkit's platform invoices for the authenticated tenant (charges from
+        Billkit to the tenant). Returns all platform invoices sorted by `created_at`
+        descending (most recent first).
+
+        Platform invoices are bounded (~12-24 per year) so no pagination is needed.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ListPlatformInvoicesResponse
+            List of platform invoices
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.invoices.list_platform_invoices()
+        """
+        _response = self._raw_client.list_platform_invoices(request_options=request_options)
+        return _response.data
+
+    def get_revenue(self, *, request_options: typing.Optional[RequestOptions] = None) -> RevenueResponse:
+        """
+        Aggregates revenue metrics from all end-user invoices for the authenticated
+        tenant. Returns totals and a month-over-month breakdown grouped by
+        `billing_period_end`.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        RevenueResponse
+            Revenue metrics
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.invoices.get_revenue()
+        """
+        _response = self._raw_client.get_revenue(request_options=request_options)
         return _response.data
 
     def preview_invoice(
@@ -140,6 +277,71 @@ class AsyncInvoicesClient:
         """
         return self._raw_client
 
+    async def list_invoice_failures(
+        self,
+        *,
+        subject_id: typing.Optional[str] = None,
+        exhausted: typing.Optional[bool] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ListInvoiceFailuresResponse:
+        """
+        Lists invoice-failure markers for the authenticated tenant, most recent
+        failure first, with optional filtering by `subject_id` and `exhausted`.
+        Supports cursor-based pagination.
+
+        Query parameters:
+        - `subject_id` — filter by subject
+        - `exhausted` — `true`/`false` to filter by retry-budget status
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        subject_id : typing.Optional[str]
+            Filter by subject ID
+
+        exhausted : typing.Optional[bool]
+            Filter by retry-budget status (true = exhausted)
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ListInvoiceFailuresResponse
+            List of invoice-failure markers
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.invoices.list_invoice_failures()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.list_invoice_failures(
+            subject_id=subject_id, exhausted=exhausted, limit=limit, cursor=cursor, request_options=request_options
+        )
+        return _response.data
+
     async def list_invoices(
         self,
         *,
@@ -147,17 +349,24 @@ class AsyncInvoicesClient:
         status: typing.Optional[str] = None,
         start_date: typing.Optional[str] = None,
         end_date: typing.Optional[str] = None,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ListInvoicesResponse:
         """
         Lists end-user invoices for the authenticated tenant with optional filtering
-        by subject_id, status, and date range.
+        by subject_id, status, and date range. Supports cursor-based pagination.
 
         Query parameters:
         - `subject_id` — filter by subject
-        - `status` — filter by invoice status (open, paid, past_due, uncollectible)
-        - `start_date` — ISO 8601 datetime; only invoices overlapping this date or later
-        - `end_date` — ISO 8601 datetime; only invoices overlapping this date or earlier
+        - `status` — filter by invoice status (open, paid, past_due, uncollectible).
+          Any other value is rejected with a 400.
+        - `start_date` — RFC 3339 datetime; only invoices overlapping this date or later.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `end_date` — RFC 3339 datetime; only invoices overlapping this date or earlier.
+          Must be a valid RFC 3339 timestamp, or the request is rejected with a 400.
+        - `limit` — maximum number of items per page (1–1000, default 100)
+        - `cursor` — opaque pagination cursor from a previous response
 
         Parameters
         ----------
@@ -168,10 +377,16 @@ class AsyncInvoicesClient:
             Filter by status (open, paid, past_due, uncollectible)
 
         start_date : typing.Optional[str]
-            ISO 8601 start date filter
+            RFC 3339 start date filter
 
         end_date : typing.Optional[str]
-            ISO 8601 end date filter
+            RFC 3339 end date filter
+
+        limit : typing.Optional[int]
+            Maximum items per page (1–1000, default 100)
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from previous response
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -204,8 +419,88 @@ class AsyncInvoicesClient:
             status=status,
             start_date=start_date,
             end_date=end_date,
+            limit=limit,
+            cursor=cursor,
             request_options=request_options,
         )
+        return _response.data
+
+    async def list_platform_invoices(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> ListPlatformInvoicesResponse:
+        """
+        Lists Billkit's platform invoices for the authenticated tenant (charges from
+        Billkit to the tenant). Returns all platform invoices sorted by `created_at`
+        descending (most recent first).
+
+        Platform invoices are bounded (~12-24 per year) so no pagination is needed.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ListPlatformInvoicesResponse
+            List of platform invoices
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.invoices.list_platform_invoices()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.list_platform_invoices(request_options=request_options)
+        return _response.data
+
+    async def get_revenue(self, *, request_options: typing.Optional[RequestOptions] = None) -> RevenueResponse:
+        """
+        Aggregates revenue metrics from all end-user invoices for the authenticated
+        tenant. Returns totals and a month-over-month breakdown grouped by
+        `billing_period_end`.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        RevenueResponse
+            Revenue metrics
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.invoices.get_revenue()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_revenue(request_options=request_options)
         return _response.data
 
     async def preview_invoice(

@@ -74,6 +74,45 @@ class ContractsClient:
         )
         return _response.data
 
+    def detach_contract(self, subject_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+        """
+        Clears any custom contract from the subject's existing assignment in the
+        store and invalidates the subject's cache entries. Tenant is resolved from
+        `X-Api-Key` via the auth middleware.
+
+        - If subject_id is empty: returns 400.
+        - If the subject has no existing assignment: returns 404.
+        - If a store error occurs: returns 500.
+        - On success: returns 204 No Content, whether or not a contract was
+          actually applied (idempotent, matching `DELETE /assignments/{subject_id}`).
+
+        Parameters
+        ----------
+        subject_id : str
+            The subject identifier
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.contracts.detach_contract(
+            subject_id="subject_id",
+        )
+        """
+        _response = self._raw_client.detach_contract(subject_id, request_options=request_options)
+        return _response.data
+
 
 class AsyncContractsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -144,4 +183,53 @@ class AsyncContractsClient:
         _response = await self._raw_client.apply_contract(
             contract_key=contract_key, subject_id=subject_id, request_options=request_options
         )
+        return _response.data
+
+    async def detach_contract(
+        self, subject_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Clears any custom contract from the subject's existing assignment in the
+        store and invalidates the subject's cache entries. Tenant is resolved from
+        `X-Api-Key` via the auth middleware.
+
+        - If subject_id is empty: returns 400.
+        - If the subject has no existing assignment: returns 404.
+        - If a store error occurs: returns 500.
+        - On success: returns 204 No Content, whether or not a contract was
+          actually applied (idempotent, matching `DELETE /assignments/{subject_id}`).
+
+        Parameters
+        ----------
+        subject_id : str
+            The subject identifier
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.contracts.detach_contract(
+                subject_id="subject_id",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.detach_contract(subject_id, request_options=request_options)
         return _response.data

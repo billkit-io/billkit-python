@@ -6,20 +6,12 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
-class KeyListItem(UniversalBaseModel):
+class RevokeKeyResponse(UniversalBaseModel):
     """
-    A single API key in the list response (key is masked).
-
-    Note: there is intentionally no `last_used_at` field. Tracking key usage
-    requires a throttled write on the auth hot path (see #230) and is deferred
-    post-MVP — the field was previously always `None`/absent, which is worse
-    than not advertising it at all.
+    Response body for a successful key revocation.
     """
 
-    created_at: str
-    key_id: str
-    name: str
-    prefix: str
+    message: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

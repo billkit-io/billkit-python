@@ -4,7 +4,9 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.change_plan_response import ChangePlanResponse
 from ..types.create_portal_token_response import CreatePortalTokenResponse
+from ..types.portal_list_invoices_response import PortalListInvoicesResponse
 from .raw_client import AsyncRawBillingClient, RawBillingClient
 
 # this is used as the default value for optional parameters
@@ -25,6 +27,72 @@ class BillingClient:
         RawBillingClient
         """
         return self._raw_client
+
+    def change_plan(
+        self, *, plan_key: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> ChangePlanResponse:
+        """
+        Allows a portal-authenticated subject to switch their plan. This is the
+        immediate-switch path only: it handles the case where billing is not configured
+        in the schema, or where the old and new plan have equal prices (lateral move).
+
+        Upgrade/downgrade branches (with proration math and Stripe charges) are
+        implemented in a later task and will extend this handler.
+
+        ## Authentication
+        Requires portal JWT (Bearer token). The subject identity comes from
+        the `PortalContext` extension (injected by `portal_auth_middleware`).
+
+        ## Request Body
+        ```json
+        { "plan_key": "pro" }
+        ```
+
+        ## Response (200)
+        ```json
+        {
+          "subject_id": "user_123",
+          "previous_plan_key": "starter",
+          "new_plan_key": "pro",
+          "changed_at": "2024-01-15T12:30:00Z",
+          "effective": "immediate",
+          "proration_charge_cents": 0
+        }
+        ```
+
+        ## Errors
+        - 400: Empty `plan_key` or already on the requested plan
+        - 401: Missing or invalid portal token
+        - 404: Subject not found or plan key not in schema
+        - 500: Internal error
+
+        Parameters
+        ----------
+        plan_key : str
+            The plan key to switch to.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ChangePlanResponse
+            Plan changed successfully
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.billing.change_plan(
+            plan_key="plan_key",
+        )
+        """
+        _response = self._raw_client.change_plan(plan_key=plan_key, request_options=request_options)
+        return _response.data
 
     def create_portal_token(
         self, *, subject_id: str, request_options: typing.Optional[RequestOptions] = None
@@ -85,6 +153,50 @@ class BillingClient:
         _response = self._raw_client.create_portal_token(subject_id=subject_id, request_options=request_options)
         return _response.data
 
+    def portal_list_invoices(
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> PortalListInvoicesResponse:
+        """
+        Scoped to the subject identified in the portal token. Cannot see other subjects' invoices.
+        Supports cursor-based pagination with portal-specific limits (default 50, max 200).
+
+        Query parameters:
+        - `limit` — maximum number of items per page (1–200, default 50)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PortalListInvoicesResponse
+            Paginated list of portal invoices
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.billing.portal_list_invoices()
+        """
+        _response = self._raw_client.portal_list_invoices(limit=limit, cursor=cursor, request_options=request_options)
+        return _response.data
+
 
 class AsyncBillingClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -100,6 +212,80 @@ class AsyncBillingClient:
         AsyncRawBillingClient
         """
         return self._raw_client
+
+    async def change_plan(
+        self, *, plan_key: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> ChangePlanResponse:
+        """
+        Allows a portal-authenticated subject to switch their plan. This is the
+        immediate-switch path only: it handles the case where billing is not configured
+        in the schema, or where the old and new plan have equal prices (lateral move).
+
+        Upgrade/downgrade branches (with proration math and Stripe charges) are
+        implemented in a later task and will extend this handler.
+
+        ## Authentication
+        Requires portal JWT (Bearer token). The subject identity comes from
+        the `PortalContext` extension (injected by `portal_auth_middleware`).
+
+        ## Request Body
+        ```json
+        { "plan_key": "pro" }
+        ```
+
+        ## Response (200)
+        ```json
+        {
+          "subject_id": "user_123",
+          "previous_plan_key": "starter",
+          "new_plan_key": "pro",
+          "changed_at": "2024-01-15T12:30:00Z",
+          "effective": "immediate",
+          "proration_charge_cents": 0
+        }
+        ```
+
+        ## Errors
+        - 400: Empty `plan_key` or already on the requested plan
+        - 401: Missing or invalid portal token
+        - 404: Subject not found or plan key not in schema
+        - 500: Internal error
+
+        Parameters
+        ----------
+        plan_key : str
+            The plan key to switch to.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ChangePlanResponse
+            Plan changed successfully
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.billing.change_plan(
+                plan_key="plan_key",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.change_plan(plan_key=plan_key, request_options=request_options)
+        return _response.data
 
     async def create_portal_token(
         self, *, subject_id: str, request_options: typing.Optional[RequestOptions] = None
@@ -166,4 +352,58 @@ class AsyncBillingClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_portal_token(subject_id=subject_id, request_options=request_options)
+        return _response.data
+
+    async def portal_list_invoices(
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> PortalListInvoicesResponse:
+        """
+        Scoped to the subject identified in the portal token. Cannot see other subjects' invoices.
+        Supports cursor-based pagination with portal-specific limits (default 50, max 200).
+
+        Query parameters:
+        - `limit` — maximum number of items per page (1–200, default 50)
+        - `cursor` — opaque pagination cursor from a previous response
+
+        Parameters
+        ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PortalListInvoicesResponse
+            Paginated list of portal invoices
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.billing.portal_list_invoices()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.portal_list_invoices(
+            limit=limit, cursor=cursor, request_options=request_options
+        )
         return _response.data

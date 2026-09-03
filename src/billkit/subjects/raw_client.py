@@ -15,6 +15,8 @@ from ..errors.bad_gateway_error import BadGatewayError
 from ..errors.bad_request_error import BadRequestError
 from ..errors.internal_server_error import InternalServerError
 from ..errors.not_found_error import NotFoundError
+from ..errors.unauthorized_error import UnauthorizedError
+from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.batch_register_response import BatchRegisterResponse
 from ..types.register_subject_request import RegisterSubjectRequest
 from ..types.register_subject_response import RegisterSubjectResponse
@@ -31,7 +33,11 @@ class RawSubjectsClient:
         self._client_wrapper = client_wrapper
 
     def list_subjects(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SubjectsResponse]:
         """
         Returns all subject assignments for the authenticated tenant.
@@ -44,6 +50,12 @@ class RawSubjectsClient:
 
         Parameters
         ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -55,6 +67,10 @@ class RawSubjectsClient:
         _response = self._client_wrapper.httpx_client.request(
             "subjects",
             method="GET",
+            params={
+                "limit": limit,
+                "cursor": cursor,
+            },
             request_options=request_options,
         )
         try:
@@ -67,6 +83,28 @@ class RawSubjectsClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 500:
                 raise InternalServerError(
                     headers=dict(_response.headers),
@@ -104,8 +142,14 @@ class RawSubjectsClient:
         If the subject already exists (re-registration), updates the Stripe Customer's
         email/name rather than creating a duplicate.
 
+        `plan_key` is validated against the tenant's schema, mirroring `POST /assignments`:
+        - If `plan_key` is provided but does not exist in the schema: returns 422.
+        - If `plan_key` is omitted, it defaults to the schema's `default_plan` (not the
+          literal string `"free"`). If the schema defines no `default_plan`: returns 422.
+        - If the tenant has no schema uploaded at all: returns 422.
+
         - If subject_id is missing or too long: returns 400.
-        - If the subject already exists: updates email/name/Stripe Customer (idempotent).
+        - If the subject already exists: updates email/name/plan_key/Stripe Customer (idempotent).
         - If no Stripe Connect account is active: subject is stored without Stripe Customer.
         - If Stripe API fails: returns 502 (subject is NOT partially created).
         - On success: returns 201 (new) or 200 (re-registration).
@@ -155,6 +199,28 @@ class RawSubjectsClient:
                 return HttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -245,6 +311,17 @@ class RawSubjectsClient:
                         ),
                     ),
                 )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -292,6 +369,17 @@ class RawSubjectsClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -329,7 +417,11 @@ class AsyncRawSubjectsClient:
         self._client_wrapper = client_wrapper
 
     async def list_subjects(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SubjectsResponse]:
         """
         Returns all subject assignments for the authenticated tenant.
@@ -342,6 +434,12 @@ class AsyncRawSubjectsClient:
 
         Parameters
         ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -353,6 +451,10 @@ class AsyncRawSubjectsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "subjects",
             method="GET",
+            params={
+                "limit": limit,
+                "cursor": cursor,
+            },
             request_options=request_options,
         )
         try:
@@ -365,6 +467,28 @@ class AsyncRawSubjectsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 500:
                 raise InternalServerError(
                     headers=dict(_response.headers),
@@ -402,8 +526,14 @@ class AsyncRawSubjectsClient:
         If the subject already exists (re-registration), updates the Stripe Customer's
         email/name rather than creating a duplicate.
 
+        `plan_key` is validated against the tenant's schema, mirroring `POST /assignments`:
+        - If `plan_key` is provided but does not exist in the schema: returns 422.
+        - If `plan_key` is omitted, it defaults to the schema's `default_plan` (not the
+          literal string `"free"`). If the schema defines no `default_plan`: returns 422.
+        - If the tenant has no schema uploaded at all: returns 422.
+
         - If subject_id is missing or too long: returns 400.
-        - If the subject already exists: updates email/name/Stripe Customer (idempotent).
+        - If the subject already exists: updates email/name/plan_key/Stripe Customer (idempotent).
         - If no Stripe Connect account is active: subject is stored without Stripe Customer.
         - If Stripe API fails: returns 502 (subject is NOT partially created).
         - On success: returns 201 (new) or 200 (re-registration).
@@ -453,6 +583,28 @@ class AsyncRawSubjectsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -543,6 +695,17 @@ class AsyncRawSubjectsClient:
                         ),
                     ),
                 )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -590,6 +753,17 @@ class AsyncRawSubjectsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),

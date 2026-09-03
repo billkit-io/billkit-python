@@ -80,6 +80,9 @@ class AssignmentsClient:
         - If subject_id is empty: returns 400.
         - If a store error occurs: returns 500.
         - On success: returns 204 No Content (regardless of whether the assignment existed).
+          The `max_subjects` self-metering counter is only decremented when an
+          assignment actually existed, so repeated or no-op deletes cannot drive
+          the counter negative.
 
         Parameters
         ----------
@@ -188,6 +191,9 @@ class AsyncAssignmentsClient:
         - If subject_id is empty: returns 400.
         - If a store error occurs: returns 500.
         - On success: returns 204 No Content (regardless of whether the assignment existed).
+          The `max_subjects` self-metering counter is only decremented when an
+          assignment actually existed, so repeated or no-op deletes cannot drive
+          the counter negative.
 
         Parameters
         ----------

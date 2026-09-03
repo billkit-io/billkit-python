@@ -6,6 +6,7 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.create_key_response import CreateKeyResponse
 from ..types.list_keys_response import ListKeysResponse
+from ..types.revoke_key_response import RevokeKeyResponse
 from ..types.rotate_key_response import RotateKeyResponse
 from .raw_client import AsyncRawApiKeysClient, RawApiKeysClient
 
@@ -124,7 +125,7 @@ class ApiKeysClient:
         _response = self._raw_client.rotate_key(request_options=request_options)
         return _response.data
 
-    def delete_key(self, key_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_key(self, key_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> RevokeKeyResponse:
         """
         Revokes (deletes) a specific API key by its key_id. Removes both the
         tenant-scoped record and the global API key reference, and invalidates
@@ -140,7 +141,8 @@ class ApiKeysClient:
 
         Returns
         -------
-        None
+        RevokeKeyResponse
+            Key revoked
 
         Examples
         --------
@@ -295,7 +297,9 @@ class AsyncApiKeysClient:
         _response = await self._raw_client.rotate_key(request_options=request_options)
         return _response.data
 
-    async def delete_key(self, key_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_key(
+        self, key_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> RevokeKeyResponse:
         """
         Revokes (deletes) a specific API key by its key_id. Removes both the
         tenant-scoped record and the global API key reference, and invalidates
@@ -311,7 +315,8 @@ class AsyncApiKeysClient:
 
         Returns
         -------
-        None
+        RevokeKeyResponse
+            Key revoked
 
         Examples
         --------

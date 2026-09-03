@@ -6,20 +6,20 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
-class KeyListItem(UniversalBaseModel):
+class PaginationQuery(UniversalBaseModel):
     """
-    A single API key in the list response (key is masked).
-
-    Note: there is intentionally no `last_used_at` field. Tracking key usage
-    requires a throttled write on the auth hot path (see #230) and is deferred
-    post-MVP — the field was previously always `None`/absent, which is worse
-    than not advertising it at all.
+    Query parameters for paginated list endpoints.
     """
 
-    created_at: str
-    key_id: str
-    name: str
-    prefix: str
+    cursor: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Opaque pagination cursor from a previous response's `next_cursor` field.
+    """
+
+    limit: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Maximum number of items to return per page.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

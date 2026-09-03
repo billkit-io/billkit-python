@@ -6,8 +6,12 @@ import typing
 from importlib import import_module
 
 if typing.TYPE_CHECKING:
-    from .types import GetSchemaRequestFormat, ValidateSchemaRequestFormat
-_dynamic_imports: typing.Dict[str, str] = {"GetSchemaRequestFormat": ".types", "ValidateSchemaRequestFormat": ".types"}
+    from .get_schema_request_format import GetSchemaRequestFormat
+    from .validate_schema_request_format import ValidateSchemaRequestFormat
+_dynamic_imports: typing.Dict[str, str] = {
+    "GetSchemaRequestFormat": ".get_schema_request_format",
+    "ValidateSchemaRequestFormat": ".validate_schema_request_format",
+}
 
 
 def __getattr__(attr_name: str) -> typing.Any:

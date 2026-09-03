@@ -6,20 +6,19 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
-class KeyListItem(UniversalBaseModel):
+class InvoiceFailureItem(UniversalBaseModel):
     """
-    A single API key in the list response (key is masked).
-
-    Note: there is intentionally no `last_used_at` field. Tracking key usage
-    requires a throttled write on the auth hot path (see #230) and is deferred
-    post-MVP — the field was previously always `None`/absent, which is worse
-    than not advertising it at all.
+    A single invoice-failure marker in the list response.
     """
 
-    created_at: str
-    key_id: str
-    name: str
-    prefix: str
+    attempt_count: int
+    error: str
+    exhausted: bool
+    first_failed_at: str
+    last_failed_at: str
+    subject_id: str
+    window_end: str
+    window_start: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

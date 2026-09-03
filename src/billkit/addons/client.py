@@ -74,6 +74,51 @@ class AddonsClient:
         )
         return _response.data
 
+    def detach_addon(
+        self, subject_id: str, addon_key: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Removes the given add-on from the subject's existing assignment in the store
+        and invalidates the subject's cache entries. Tenant is resolved from
+        `X-Api-Key` via the auth middleware.
+
+        - If subject_id or addon_key is empty: returns 400.
+        - If the subject has no existing assignment: returns 404.
+        - If a store error occurs: returns 500.
+        - On success: returns 204 No Content, whether or not the add-on was
+          actually attached (idempotent, matching `DELETE /assignments/{subject_id}`).
+
+        Parameters
+        ----------
+        subject_id : str
+            The subject identifier
+
+        addon_key : str
+            The add-on key to detach
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.addons.detach_addon(
+            subject_id="subject_id",
+            addon_key="addon_key",
+        )
+        """
+        _response = self._raw_client.detach_addon(subject_id, addon_key, request_options=request_options)
+        return _response.data
+
 
 class AsyncAddonsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -144,4 +189,57 @@ class AsyncAddonsClient:
         _response = await self._raw_client.attach_addon(
             addon_key=addon_key, subject_id=subject_id, request_options=request_options
         )
+        return _response.data
+
+    async def detach_addon(
+        self, subject_id: str, addon_key: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Removes the given add-on from the subject's existing assignment in the store
+        and invalidates the subject's cache entries. Tenant is resolved from
+        `X-Api-Key` via the auth middleware.
+
+        - If subject_id or addon_key is empty: returns 400.
+        - If the subject has no existing assignment: returns 404.
+        - If a store error occurs: returns 500.
+        - On success: returns 204 No Content, whether or not the add-on was
+          actually attached (idempotent, matching `DELETE /assignments/{subject_id}`).
+
+        Parameters
+        ----------
+        subject_id : str
+            The subject identifier
+
+        addon_key : str
+            The add-on key to detach
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.addons.detach_addon(
+                subject_id="subject_id",
+                addon_key="addon_key",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.detach_addon(subject_id, addon_key, request_options=request_options)
         return _response.data

@@ -30,7 +30,13 @@ class SubjectsClient:
         """
         return self._raw_client
 
-    def list_subjects(self, *, request_options: typing.Optional[RequestOptions] = None) -> SubjectsResponse:
+    def list_subjects(
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SubjectsResponse:
         """
         Returns all subject assignments for the authenticated tenant.
         The tenant is resolved from `X-Api-Key` via the auth middleware.
@@ -42,6 +48,12 @@ class SubjectsClient:
 
         Parameters
         ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -60,7 +72,7 @@ class SubjectsClient:
         )
         client.subjects.list_subjects()
         """
-        _response = self._raw_client.list_subjects(request_options=request_options)
+        _response = self._raw_client.list_subjects(limit=limit, cursor=cursor, request_options=request_options)
         return _response.data
 
     def register_subject(
@@ -80,8 +92,14 @@ class SubjectsClient:
         If the subject already exists (re-registration), updates the Stripe Customer's
         email/name rather than creating a duplicate.
 
+        `plan_key` is validated against the tenant's schema, mirroring `POST /assignments`:
+        - If `plan_key` is provided but does not exist in the schema: returns 422.
+        - If `plan_key` is omitted, it defaults to the schema's `default_plan` (not the
+          literal string `"free"`). If the schema defines no `default_plan`: returns 422.
+        - If the tenant has no schema uploaded at all: returns 422.
+
         - If subject_id is missing or too long: returns 400.
-        - If the subject already exists: updates email/name/Stripe Customer (idempotent).
+        - If the subject already exists: updates email/name/plan_key/Stripe Customer (idempotent).
         - If no Stripe Connect account is active: subject is stored without Stripe Customer.
         - If Stripe API fails: returns 502 (subject is NOT partially created).
         - On success: returns 201 (new) or 200 (re-registration).
@@ -223,7 +241,13 @@ class AsyncSubjectsClient:
         """
         return self._raw_client
 
-    async def list_subjects(self, *, request_options: typing.Optional[RequestOptions] = None) -> SubjectsResponse:
+    async def list_subjects(
+        self,
+        *,
+        limit: typing.Optional[int] = None,
+        cursor: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SubjectsResponse:
         """
         Returns all subject assignments for the authenticated tenant.
         The tenant is resolved from `X-Api-Key` via the auth middleware.
@@ -235,6 +259,12 @@ class AsyncSubjectsClient:
 
         Parameters
         ----------
+        limit : typing.Optional[int]
+            Maximum number of items to return per page.
+
+        cursor : typing.Optional[str]
+            Opaque pagination cursor from a previous response's `next_cursor` field.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -261,7 +291,7 @@ class AsyncSubjectsClient:
 
         asyncio.run(main())
         """
-        _response = await self._raw_client.list_subjects(request_options=request_options)
+        _response = await self._raw_client.list_subjects(limit=limit, cursor=cursor, request_options=request_options)
         return _response.data
 
     async def register_subject(
@@ -281,8 +311,14 @@ class AsyncSubjectsClient:
         If the subject already exists (re-registration), updates the Stripe Customer's
         email/name rather than creating a duplicate.
 
+        `plan_key` is validated against the tenant's schema, mirroring `POST /assignments`:
+        - If `plan_key` is provided but does not exist in the schema: returns 422.
+        - If `plan_key` is omitted, it defaults to the schema's `default_plan` (not the
+          literal string `"free"`). If the schema defines no `default_plan`: returns 422.
+        - If the tenant has no schema uploaded at all: returns 422.
+
         - If subject_id is missing or too long: returns 400.
-        - If the subject already exists: updates email/name/Stripe Customer (idempotent).
+        - If the subject already exists: updates email/name/plan_key/Stripe Customer (idempotent).
         - If no Stripe Connect account is active: subject is stored without Stripe Customer.
         - If Stripe API fails: returns 502 (subject is NOT partially created).
         - On success: returns 201 (new) or 200 (re-registration).

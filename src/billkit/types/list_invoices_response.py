@@ -12,8 +12,16 @@ class ListInvoicesResponse(UniversalBaseModel):
     Response body for `GET /invoices`.
     """
 
+    has_more: bool = pydantic.Field()
+    """
+    Whether more results exist beyond this page.
+    """
+
     invoices: typing.List[InvoiceListItem]
-    total: int
+    next_cursor: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Opaque cursor for the next page. Null/absent on the last page.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -16,6 +16,7 @@ if typing.TYPE_CHECKING:
     from .billing_config import BillingConfig
     from .billing_cycle import BillingCycle
     from .cadence import Cadence
+    from .change_plan_response import ChangePlanResponse
     from .contract_definition import ContractDefinition
     from .create_assignment_response import CreateAssignmentResponse
     from .create_key_response import CreateKeyResponse
@@ -26,6 +27,7 @@ if typing.TYPE_CHECKING:
     from .feature_usage import FeatureUsage
     from .feature_value import FeatureValue
     from .gate_response import GateResponse
+    from .invoice_failure_item import InvoiceFailureItem
     from .invoice_line_item_response import InvoiceLineItemResponse
     from .invoice_list_item import InvoiceListItem
     from .invoice_preview_response import InvoicePreviewResponse
@@ -33,12 +35,19 @@ if typing.TYPE_CHECKING:
     from .limit import Limit
     from .limit_definition import LimitDefinition
     from .limit_one import LimitOne
+    from .list_invoice_failures_params import ListInvoiceFailuresParams
+    from .list_invoice_failures_response import ListInvoiceFailuresResponse
     from .list_invoices_params import ListInvoicesParams
     from .list_invoices_response import ListInvoicesResponse
     from .list_keys_response import ListKeysResponse
+    from .list_platform_invoices_response import ListPlatformInvoicesResponse
+    from .monthly_revenue import MonthlyRevenue
     from .overage_info import OverageInfo
     from .overage_policy import OveragePolicy
+    from .pagination_query import PaginationQuery
     from .plan_definition import PlanDefinition
+    from .platform_invoice_item import PlatformInvoiceItem
+    from .portal_list_invoices_response import PortalListInvoicesResponse
     from .preview_overage_item import PreviewOverageItem
     from .pricing_billing import PricingBilling
     from .pricing_feature import PricingFeature
@@ -49,8 +58,13 @@ if typing.TYPE_CHECKING:
     from .rate_card_response import RateCardResponse
     from .register_subject_request import RegisterSubjectRequest
     from .register_subject_response import RegisterSubjectResponse
+    from .revenue_response import RevenueResponse
+    from .revoke_key_response import RevokeKeyResponse
     from .rotate_key_response import RotateKeyResponse
     from .schema_document import SchemaDocument
+    from .schema_format import SchemaFormat
+    from .set_usage_rejection import SetUsageRejection
+    from .set_usage_response import SetUsageResponse
     from .subject_detail_response import SubjectDetailResponse
     from .subject_info import SubjectInfo
     from .subjects_response import SubjectsResponse
@@ -70,6 +84,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "BillingConfig": ".billing_config",
     "BillingCycle": ".billing_cycle",
     "Cadence": ".cadence",
+    "ChangePlanResponse": ".change_plan_response",
     "ContractDefinition": ".contract_definition",
     "CreateAssignmentResponse": ".create_assignment_response",
     "CreateKeyResponse": ".create_key_response",
@@ -80,6 +95,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "FeatureUsage": ".feature_usage",
     "FeatureValue": ".feature_value",
     "GateResponse": ".gate_response",
+    "InvoiceFailureItem": ".invoice_failure_item",
     "InvoiceLineItemResponse": ".invoice_line_item_response",
     "InvoiceListItem": ".invoice_list_item",
     "InvoicePreviewResponse": ".invoice_preview_response",
@@ -87,12 +103,19 @@ _dynamic_imports: typing.Dict[str, str] = {
     "Limit": ".limit",
     "LimitDefinition": ".limit_definition",
     "LimitOne": ".limit_one",
+    "ListInvoiceFailuresParams": ".list_invoice_failures_params",
+    "ListInvoiceFailuresResponse": ".list_invoice_failures_response",
     "ListInvoicesParams": ".list_invoices_params",
     "ListInvoicesResponse": ".list_invoices_response",
     "ListKeysResponse": ".list_keys_response",
+    "ListPlatformInvoicesResponse": ".list_platform_invoices_response",
+    "MonthlyRevenue": ".monthly_revenue",
     "OverageInfo": ".overage_info",
     "OveragePolicy": ".overage_policy",
+    "PaginationQuery": ".pagination_query",
     "PlanDefinition": ".plan_definition",
+    "PlatformInvoiceItem": ".platform_invoice_item",
+    "PortalListInvoicesResponse": ".portal_list_invoices_response",
     "PreviewOverageItem": ".preview_overage_item",
     "PricingBilling": ".pricing_billing",
     "PricingFeature": ".pricing_feature",
@@ -103,8 +126,13 @@ _dynamic_imports: typing.Dict[str, str] = {
     "RateCardResponse": ".rate_card_response",
     "RegisterSubjectRequest": ".register_subject_request",
     "RegisterSubjectResponse": ".register_subject_response",
+    "RevenueResponse": ".revenue_response",
+    "RevokeKeyResponse": ".revoke_key_response",
     "RotateKeyResponse": ".rotate_key_response",
     "SchemaDocument": ".schema_document",
+    "SchemaFormat": ".schema_format",
+    "SetUsageRejection": ".set_usage_rejection",
+    "SetUsageResponse": ".set_usage_response",
     "SubjectDetailResponse": ".subject_detail_response",
     "SubjectInfo": ".subject_info",
     "SubjectsResponse": ".subjects_response",
@@ -148,6 +176,7 @@ __all__ = [
     "BillingConfig",
     "BillingCycle",
     "Cadence",
+    "ChangePlanResponse",
     "ContractDefinition",
     "CreateAssignmentResponse",
     "CreateKeyResponse",
@@ -158,6 +187,7 @@ __all__ = [
     "FeatureUsage",
     "FeatureValue",
     "GateResponse",
+    "InvoiceFailureItem",
     "InvoiceLineItemResponse",
     "InvoiceListItem",
     "InvoicePreviewResponse",
@@ -165,12 +195,19 @@ __all__ = [
     "Limit",
     "LimitDefinition",
     "LimitOne",
+    "ListInvoiceFailuresParams",
+    "ListInvoiceFailuresResponse",
     "ListInvoicesParams",
     "ListInvoicesResponse",
     "ListKeysResponse",
+    "ListPlatformInvoicesResponse",
+    "MonthlyRevenue",
     "OverageInfo",
     "OveragePolicy",
+    "PaginationQuery",
     "PlanDefinition",
+    "PlatformInvoiceItem",
+    "PortalListInvoicesResponse",
     "PreviewOverageItem",
     "PricingBilling",
     "PricingFeature",
@@ -181,8 +218,13 @@ __all__ = [
     "RateCardResponse",
     "RegisterSubjectRequest",
     "RegisterSubjectResponse",
+    "RevenueResponse",
+    "RevokeKeyResponse",
     "RotateKeyResponse",
     "SchemaDocument",
+    "SchemaFormat",
+    "SetUsageRejection",
+    "SetUsageResponse",
     "SubjectDetailResponse",
     "SubjectInfo",
     "SubjectsResponse",

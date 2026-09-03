@@ -6,6 +6,8 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.validation_error_response import ValidationErrorResponse
 from .raw_client import AsyncRawSchemaClient, RawSchemaClient
+from .types.get_schema_request_format import GetSchemaRequestFormat
+from .types.validate_schema_request_format import ValidateSchemaRequestFormat
 
 
 class SchemaClient:
@@ -23,24 +25,36 @@ class SchemaClient:
         """
         return self._raw_client
 
-    def get_schema(self, *, request_options: typing.Optional[RequestOptions] = None) -> str:
+    def get_schema(
+        self,
+        *,
+        format: typing.Optional[GetSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> str:
         """
         Retrieves the tenant's own schema document from the store.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
-        - If the tenant has a schema: returns 200 with the schema document body (as stored).
+        Accepts an optional `?format=yaml` or `?format=json` query parameter.
+        Defaults to JSON (the canonical storage format). When `yaml` is requested,
+        the stored JSON is converted to YAML before returning.
+
+        - If the tenant has a schema: returns 200 with the schema document body.
         - If the tenant has no schema: returns 404 with `{ "error": "schema not found" }`.
         - If a store error occurs: returns 500 with `{ "error": "internal error" }`.
 
         Parameters
         ----------
+        format : typing.Optional[GetSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
         str
-            Schema document (YAML or JSON)
+            Schema document (JSON or YAML)
 
         Examples
         --------
@@ -52,21 +66,38 @@ class SchemaClient:
         )
         client.schema.get_schema()
         """
-        _response = self._raw_client.get_schema(request_options=request_options)
+        _response = self._raw_client.get_schema(format=format, request_options=request_options)
         return _response.data
 
-    def put_schema(self, *, request_options: typing.Optional[RequestOptions] = None) -> ValidationErrorResponse:
+    def put_schema(
+        self, *, force: typing.Optional[bool] = None, request_options: typing.Optional[RequestOptions] = None
+    ) -> ValidationErrorResponse:
         """
         Validates, persists to store, and invalidates all tenant cache entries.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
+        Before persisting, the new document is checked for referential integrity
+        against the tenant's existing subject assignments: if any assignment
+        references a `plan_key`, `contract_key`, or add-on key that would no
+        longer exist in the new document, the upload is rejected (422) so that
+        assignments never silently go stale. Pass `?force=true` to bypass this
+        check and persist anyway (e.g. when reassigning affected subjects out of
+        band).
+
         - If the body is empty: returns 400.
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }` (not persisted).
+        - If persisting would orphan subject assignments and `force` is not set: returns 422 with `{ "valid": false, "errors": [...] }` (not persisted).
         - If the document is valid: persists to store, invalidates cache, returns 200 with `{ "valid": true, "errors": [] }`.
         - If a store or cache error occurs: returns 500.
 
         Parameters
         ----------
+        force : typing.Optional[bool]
+            When `true`, bypass the referential-integrity check against existing
+            subject assignments and persist the schema even if doing so would orphan
+            a plan, contract, or add-on key that subjects are still assigned to.
+            Defaults to `false`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -85,16 +116,26 @@ class SchemaClient:
         )
         client.schema.put_schema()
         """
-        _response = self._raw_client.put_schema(request_options=request_options)
+        _response = self._raw_client.put_schema(force=force, request_options=request_options)
         return _response.data
 
-    def validate_schema(self, *, request_options: typing.Optional[RequestOptions] = None) -> ValidationErrorResponse:
+    def validate_schema(
+        self,
+        *,
+        format: typing.Optional[ValidateSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ValidationErrorResponse:
         """
         Accepts a raw schema document body (YAML or JSON), runs the full validator
         (structural + semantic), and returns a `ValidationErrorResponse` without
         persisting anything.
 
-        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }`.
+        Accepts an optional `?format=json` or `?format=yaml` query parameter.
+        When provided and the schema is valid, the response includes a `document`
+        field containing the schema serialized in the requested format.
+        Defaults to no document in the response (backward-compatible).
+
+        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }` (and optionally `"document": "..."`).
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }`.
         - If the body is empty: returns 400.
 
@@ -103,6 +144,9 @@ class SchemaClient:
 
         Parameters
         ----------
+        format : typing.Optional[ValidateSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -121,7 +165,7 @@ class SchemaClient:
         )
         client.schema.validate_schema()
         """
-        _response = self._raw_client.validate_schema(request_options=request_options)
+        _response = self._raw_client.validate_schema(format=format, request_options=request_options)
         return _response.data
 
 
@@ -140,24 +184,36 @@ class AsyncSchemaClient:
         """
         return self._raw_client
 
-    async def get_schema(self, *, request_options: typing.Optional[RequestOptions] = None) -> str:
+    async def get_schema(
+        self,
+        *,
+        format: typing.Optional[GetSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> str:
         """
         Retrieves the tenant's own schema document from the store.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
-        - If the tenant has a schema: returns 200 with the schema document body (as stored).
+        Accepts an optional `?format=yaml` or `?format=json` query parameter.
+        Defaults to JSON (the canonical storage format). When `yaml` is requested,
+        the stored JSON is converted to YAML before returning.
+
+        - If the tenant has a schema: returns 200 with the schema document body.
         - If the tenant has no schema: returns 404 with `{ "error": "schema not found" }`.
         - If a store error occurs: returns 500 with `{ "error": "internal error" }`.
 
         Parameters
         ----------
+        format : typing.Optional[GetSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
         str
-            Schema document (YAML or JSON)
+            Schema document (JSON or YAML)
 
         Examples
         --------
@@ -177,21 +233,38 @@ class AsyncSchemaClient:
 
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_schema(request_options=request_options)
+        _response = await self._raw_client.get_schema(format=format, request_options=request_options)
         return _response.data
 
-    async def put_schema(self, *, request_options: typing.Optional[RequestOptions] = None) -> ValidationErrorResponse:
+    async def put_schema(
+        self, *, force: typing.Optional[bool] = None, request_options: typing.Optional[RequestOptions] = None
+    ) -> ValidationErrorResponse:
         """
         Validates, persists to store, and invalidates all tenant cache entries.
         Tenant is resolved from `X-Api-Key` via the auth middleware.
 
+        Before persisting, the new document is checked for referential integrity
+        against the tenant's existing subject assignments: if any assignment
+        references a `plan_key`, `contract_key`, or add-on key that would no
+        longer exist in the new document, the upload is rejected (422) so that
+        assignments never silently go stale. Pass `?force=true` to bypass this
+        check and persist anyway (e.g. when reassigning affected subjects out of
+        band).
+
         - If the body is empty: returns 400.
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }` (not persisted).
+        - If persisting would orphan subject assignments and `force` is not set: returns 422 with `{ "valid": false, "errors": [...] }` (not persisted).
         - If the document is valid: persists to store, invalidates cache, returns 200 with `{ "valid": true, "errors": [] }`.
         - If a store or cache error occurs: returns 500.
 
         Parameters
         ----------
+        force : typing.Optional[bool]
+            When `true`, bypass the referential-integrity check against existing
+            subject assignments and persist the schema even if doing so would orphan
+            a plan, contract, or add-on key that subjects are still assigned to.
+            Defaults to `false`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -218,18 +291,26 @@ class AsyncSchemaClient:
 
         asyncio.run(main())
         """
-        _response = await self._raw_client.put_schema(request_options=request_options)
+        _response = await self._raw_client.put_schema(force=force, request_options=request_options)
         return _response.data
 
     async def validate_schema(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        format: typing.Optional[ValidateSchemaRequestFormat] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> ValidationErrorResponse:
         """
         Accepts a raw schema document body (YAML or JSON), runs the full validator
         (structural + semantic), and returns a `ValidationErrorResponse` without
         persisting anything.
 
-        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }`.
+        Accepts an optional `?format=json` or `?format=yaml` query parameter.
+        When provided and the schema is valid, the response includes a `document`
+        field containing the schema serialized in the requested format.
+        Defaults to no document in the response (backward-compatible).
+
+        - If the document is valid: returns 200 with `{ "valid": true, "errors": [] }` (and optionally `"document": "..."`).
         - If the document has validation errors: returns 200 with `{ "valid": false, "errors": [...] }`.
         - If the body is empty: returns 400.
 
@@ -238,6 +319,9 @@ class AsyncSchemaClient:
 
         Parameters
         ----------
+        format : typing.Optional[ValidateSchemaRequestFormat]
+            Output format: "json" (default) or "yaml".
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -264,5 +348,5 @@ class AsyncSchemaClient:
 
         asyncio.run(main())
         """
-        _response = await self._raw_client.validate_schema(request_options=request_options)
+        _response = await self._raw_client.validate_schema(format=format, request_options=request_options)
         return _response.data
