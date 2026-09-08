@@ -5,6 +5,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .billing_cycle import BillingCycle
+from .billing_mode import BillingMode
 
 
 class BillingConfig(UniversalBaseModel):
@@ -17,6 +18,7 @@ class BillingConfig(UniversalBaseModel):
     How often invoices are generated
     """
 
+    billing_mode: typing.Optional[BillingMode] = None
     currency: str = pydantic.Field()
     """
     ISO 4217 currency code (e.g., "USD", "EUR", "GBP")

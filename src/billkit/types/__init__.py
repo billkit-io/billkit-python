@@ -15,6 +15,7 @@ if typing.TYPE_CHECKING:
     from .batch_subject_result import BatchSubjectResult
     from .billing_config import BillingConfig
     from .billing_cycle import BillingCycle
+    from .billing_mode import BillingMode
     from .cadence import Cadence
     from .change_plan_response import ChangePlanResponse
     from .contract_definition import ContractDefinition
@@ -83,6 +84,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "BatchSubjectResult": ".batch_subject_result",
     "BillingConfig": ".billing_config",
     "BillingCycle": ".billing_cycle",
+    "BillingMode": ".billing_mode",
     "Cadence": ".cadence",
     "ChangePlanResponse": ".change_plan_response",
     "ContractDefinition": ".contract_definition",
@@ -175,6 +177,7 @@ __all__ = [
     "BatchSubjectResult",
     "BillingConfig",
     "BillingCycle",
+    "BillingMode",
     "Cadence",
     "ChangePlanResponse",
     "ContractDefinition",
