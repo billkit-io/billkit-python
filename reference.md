@@ -2192,6 +2192,255 @@ client.subjects.register_subjects_batch(
 </dl>
 </details>
 
+<details><summary><code>client.subjects.<a href="src/billkit/subjects/client.py">create_checkout_fallback</a>(...) -> CheckoutFallbackResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**Non-default.** Requires the tenant to build their own card-entry UI, which
+violates the zero-tenant-code principle (NFR-4) — the hosted
+`POST /subjects/checkout-session` is the recommended path. This exists only
+for tenants who deliberately want their payment UI on their own domain.
+
+Behavior (converges on the same outcome as the hosted path):
+1. Create/reference the subject; ensure a Stripe Customer.
+2. Set the supplied `payment_method_id` as the customer's default so
+   recurring charges auto-charge off-session (US-10).
+3. **Prepaid:** charge the first window base off-session (reusing the
+   `create_and_finalize_proration_invoice` path) and idempotently claim the
+   window-1 `Base` `InvoiceRecord` (same deterministic id as the hosted path
+   and the recurring `invoice_job`). **Postpaid:** no charge at signup.
+4. Elevate the subject to `billable`.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.subjects.create_checkout_fallback(
+    email="email",
+    payment_method_id="payment_method_id",
+    subject_id="subject_id",
+)
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**email:** `str` 
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**payment_method_id:** `str` — The confirmed payment method id captured by the tenant's own card form.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**subject_id:** `str` 
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**name:** `typing.Optional[str]` 
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**plan_key:** `typing.Optional[str]` 
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+<details><summary><code>client.subjects.<a href="src/billkit/subjects/client.py">create_checkout_session</a>(...) -> CheckoutSessionResponse</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Creates (or references) a subject in the `pending_checkout` state and returns
+a Stripe-hosted onboarding URL, with the Session mode branched from the
+schema's `billing_mode` (prepaid ⇒ `payment`, postpaid ⇒ `setup`). The
+tenant-facing contract is identical for both modes.
+
+- 400 if `subject_id`/`email`/`success_url`/`cancel_url` are missing.
+- 422 if no schema is uploaded, or `plan_key` is not in the schema, or (for
+  prepaid) the resolved plan has no positive `price` to charge.
+- 409 if the subject already exists and is already billable (paid) — nothing
+  to onboard.
+- 502 if Stripe fails (Customer or Session creation). The subject is left in
+  a retryable state.
+- 200 with `{ url, session_id, billing_mode }` on success.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from billkit import BillkitApi
+
+client = BillkitApi(
+    api_key="<value>",
+    base_url="https://yourhost.com/path/to/api",
+)
+
+client.subjects.create_checkout_session(
+    cancel_url="cancel_url",
+    email="email",
+    subject_id="subject_id",
+    success_url="success_url",
+)
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**cancel_url:** `str` — Where Stripe redirects the subject on cancel.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**email:** `str` — Email for the Stripe Customer / receipts (required to create a Customer).
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**subject_id:** `str` 
+
+The subject to onboard. Created (in `pending_checkout` state) if new;
+referenced if it already exists.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**success_url:** `str` — Where Stripe redirects the subject on success.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**name:** `typing.Optional[str]` — Optional display name.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**plan_key:** `typing.Optional[str]` — Plan to onboard onto. Defaults to the schema's `default_plan` when unset.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
 <details><summary><code>client.subjects.<a href="src/billkit/subjects/client.py">get_subject</a>(...) -> SubjectDetailResponse</code></summary>
 <dl>
 <dd>

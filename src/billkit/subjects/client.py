@@ -5,6 +5,8 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.batch_register_response import BatchRegisterResponse
+from ..types.checkout_fallback_response import CheckoutFallbackResponse
+from ..types.checkout_session_response import CheckoutSessionResponse
 from ..types.register_subject_request import RegisterSubjectRequest
 from ..types.register_subject_response import RegisterSubjectResponse
 from ..types.subject_detail_response import SubjectDetailResponse
@@ -185,6 +187,158 @@ class SubjectsClient:
         )
         """
         _response = self._raw_client.register_subjects_batch(subjects=subjects, request_options=request_options)
+        return _response.data
+
+    def create_checkout_fallback(
+        self,
+        *,
+        email: str,
+        payment_method_id: str,
+        subject_id: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> CheckoutFallbackResponse:
+        """
+        **Non-default.** Requires the tenant to build their own card-entry UI, which
+        violates the zero-tenant-code principle (NFR-4) — the hosted
+        `POST /subjects/checkout-session` is the recommended path. This exists only
+        for tenants who deliberately want their payment UI on their own domain.
+
+        Behavior (converges on the same outcome as the hosted path):
+        1. Create/reference the subject; ensure a Stripe Customer.
+        2. Set the supplied `payment_method_id` as the customer's default so
+           recurring charges auto-charge off-session (US-10).
+        3. **Prepaid:** charge the first window base off-session (reusing the
+           `create_and_finalize_proration_invoice` path) and idempotently claim the
+           window-1 `Base` `InvoiceRecord` (same deterministic id as the hosted path
+           and the recurring `invoice_job`). **Postpaid:** no charge at signup.
+        4. Elevate the subject to `billable`.
+
+        Parameters
+        ----------
+        email : str
+
+        payment_method_id : str
+            The confirmed payment method id captured by the tenant's own card form.
+
+        subject_id : str
+
+        name : typing.Optional[str]
+
+        plan_key : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        CheckoutFallbackResponse
+            Subject onboarded via embedded fallback
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.subjects.create_checkout_fallback(
+            email="email",
+            payment_method_id="payment_method_id",
+            subject_id="subject_id",
+        )
+        """
+        _response = self._raw_client.create_checkout_fallback(
+            email=email,
+            payment_method_id=payment_method_id,
+            subject_id=subject_id,
+            name=name,
+            plan_key=plan_key,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def create_checkout_session(
+        self,
+        *,
+        cancel_url: str,
+        email: str,
+        subject_id: str,
+        success_url: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> CheckoutSessionResponse:
+        """
+        Creates (or references) a subject in the `pending_checkout` state and returns
+        a Stripe-hosted onboarding URL, with the Session mode branched from the
+        schema's `billing_mode` (prepaid ⇒ `payment`, postpaid ⇒ `setup`). The
+        tenant-facing contract is identical for both modes.
+
+        - 400 if `subject_id`/`email`/`success_url`/`cancel_url` are missing.
+        - 422 if no schema is uploaded, or `plan_key` is not in the schema, or (for
+          prepaid) the resolved plan has no positive `price` to charge.
+        - 409 if the subject already exists and is already billable (paid) — nothing
+          to onboard.
+        - 502 if Stripe fails (Customer or Session creation). The subject is left in
+          a retryable state.
+        - 200 with `{ url, session_id, billing_mode }` on success.
+
+        Parameters
+        ----------
+        cancel_url : str
+            Where Stripe redirects the subject on cancel.
+
+        email : str
+            Email for the Stripe Customer / receipts (required to create a Customer).
+
+        subject_id : str
+            The subject to onboard. Created (in `pending_checkout` state) if new;
+            referenced if it already exists.
+
+        success_url : str
+            Where Stripe redirects the subject on success.
+
+        name : typing.Optional[str]
+            Optional display name.
+
+        plan_key : typing.Optional[str]
+            Plan to onboard onto. Defaults to the schema's `default_plan` when unset.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        CheckoutSessionResponse
+            Hosted onboarding session created
+
+        Examples
+        --------
+        from billkit import BillkitApi
+
+        client = BillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+        client.subjects.create_checkout_session(
+            cancel_url="cancel_url",
+            email="email",
+            subject_id="subject_id",
+            success_url="success_url",
+        )
+        """
+        _response = self._raw_client.create_checkout_session(
+            cancel_url=cancel_url,
+            email=email,
+            subject_id=subject_id,
+            success_url=success_url,
+            name=name,
+            plan_key=plan_key,
+            request_options=request_options,
+        )
         return _response.data
 
     def get_subject(
@@ -420,6 +574,174 @@ class AsyncSubjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.register_subjects_batch(subjects=subjects, request_options=request_options)
+        return _response.data
+
+    async def create_checkout_fallback(
+        self,
+        *,
+        email: str,
+        payment_method_id: str,
+        subject_id: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> CheckoutFallbackResponse:
+        """
+        **Non-default.** Requires the tenant to build their own card-entry UI, which
+        violates the zero-tenant-code principle (NFR-4) — the hosted
+        `POST /subjects/checkout-session` is the recommended path. This exists only
+        for tenants who deliberately want their payment UI on their own domain.
+
+        Behavior (converges on the same outcome as the hosted path):
+        1. Create/reference the subject; ensure a Stripe Customer.
+        2. Set the supplied `payment_method_id` as the customer's default so
+           recurring charges auto-charge off-session (US-10).
+        3. **Prepaid:** charge the first window base off-session (reusing the
+           `create_and_finalize_proration_invoice` path) and idempotently claim the
+           window-1 `Base` `InvoiceRecord` (same deterministic id as the hosted path
+           and the recurring `invoice_job`). **Postpaid:** no charge at signup.
+        4. Elevate the subject to `billable`.
+
+        Parameters
+        ----------
+        email : str
+
+        payment_method_id : str
+            The confirmed payment method id captured by the tenant's own card form.
+
+        subject_id : str
+
+        name : typing.Optional[str]
+
+        plan_key : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        CheckoutFallbackResponse
+            Subject onboarded via embedded fallback
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.subjects.create_checkout_fallback(
+                email="email",
+                payment_method_id="payment_method_id",
+                subject_id="subject_id",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_checkout_fallback(
+            email=email,
+            payment_method_id=payment_method_id,
+            subject_id=subject_id,
+            name=name,
+            plan_key=plan_key,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def create_checkout_session(
+        self,
+        *,
+        cancel_url: str,
+        email: str,
+        subject_id: str,
+        success_url: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> CheckoutSessionResponse:
+        """
+        Creates (or references) a subject in the `pending_checkout` state and returns
+        a Stripe-hosted onboarding URL, with the Session mode branched from the
+        schema's `billing_mode` (prepaid ⇒ `payment`, postpaid ⇒ `setup`). The
+        tenant-facing contract is identical for both modes.
+
+        - 400 if `subject_id`/`email`/`success_url`/`cancel_url` are missing.
+        - 422 if no schema is uploaded, or `plan_key` is not in the schema, or (for
+          prepaid) the resolved plan has no positive `price` to charge.
+        - 409 if the subject already exists and is already billable (paid) — nothing
+          to onboard.
+        - 502 if Stripe fails (Customer or Session creation). The subject is left in
+          a retryable state.
+        - 200 with `{ url, session_id, billing_mode }` on success.
+
+        Parameters
+        ----------
+        cancel_url : str
+            Where Stripe redirects the subject on cancel.
+
+        email : str
+            Email for the Stripe Customer / receipts (required to create a Customer).
+
+        subject_id : str
+            The subject to onboard. Created (in `pending_checkout` state) if new;
+            referenced if it already exists.
+
+        success_url : str
+            Where Stripe redirects the subject on success.
+
+        name : typing.Optional[str]
+            Optional display name.
+
+        plan_key : typing.Optional[str]
+            Plan to onboard onto. Defaults to the schema's `default_plan` when unset.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        CheckoutSessionResponse
+            Hosted onboarding session created
+
+        Examples
+        --------
+        import asyncio
+
+        from billkit import AsyncBillkitApi
+
+        client = AsyncBillkitApi(
+            api_key="YOUR_API_KEY",
+            base_url="https://yourhost.com/path/to/api",
+        )
+
+
+        async def main() -> None:
+            await client.subjects.create_checkout_session(
+                cancel_url="cancel_url",
+                email="email",
+                subject_id="subject_id",
+                success_url="success_url",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_checkout_session(
+            cancel_url=cancel_url,
+            email=email,
+            subject_id=subject_id,
+            success_url=success_url,
+            name=name,
+            plan_key=plan_key,
+            request_options=request_options,
+        )
         return _response.data
 
     async def get_subject(

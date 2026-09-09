@@ -18,6 +18,8 @@ if typing.TYPE_CHECKING:
     from .billing_mode import BillingMode
     from .cadence import Cadence
     from .change_plan_response import ChangePlanResponse
+    from .checkout_fallback_response import CheckoutFallbackResponse
+    from .checkout_session_response import CheckoutSessionResponse
     from .contract_definition import ContractDefinition
     from .create_assignment_response import CreateAssignmentResponse
     from .create_key_response import CreateKeyResponse
@@ -87,6 +89,8 @@ _dynamic_imports: typing.Dict[str, str] = {
     "BillingMode": ".billing_mode",
     "Cadence": ".cadence",
     "ChangePlanResponse": ".change_plan_response",
+    "CheckoutFallbackResponse": ".checkout_fallback_response",
+    "CheckoutSessionResponse": ".checkout_session_response",
     "ContractDefinition": ".contract_definition",
     "CreateAssignmentResponse": ".create_assignment_response",
     "CreateKeyResponse": ".create_key_response",
@@ -180,6 +184,8 @@ __all__ = [
     "BillingMode",
     "Cadence",
     "ChangePlanResponse",
+    "CheckoutFallbackResponse",
+    "CheckoutSessionResponse",
     "ContractDefinition",
     "CreateAssignmentResponse",
     "CreateKeyResponse",

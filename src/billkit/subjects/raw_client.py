@@ -13,11 +13,14 @@ from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_gateway_error import BadGatewayError
 from ..errors.bad_request_error import BadRequestError
+from ..errors.conflict_error import ConflictError
 from ..errors.internal_server_error import InternalServerError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unauthorized_error import UnauthorizedError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.batch_register_response import BatchRegisterResponse
+from ..types.checkout_fallback_response import CheckoutFallbackResponse
+from ..types.checkout_session_response import CheckoutSessionResponse
 from ..types.register_subject_request import RegisterSubjectRequest
 from ..types.register_subject_response import RegisterSubjectResponse
 from ..types.subject_detail_response import SubjectDetailResponse
@@ -313,6 +316,278 @@ class RawSubjectsClient:
                 )
             if _response.status_code == 401:
                 raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_checkout_fallback(
+        self,
+        *,
+        email: str,
+        payment_method_id: str,
+        subject_id: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[CheckoutFallbackResponse]:
+        """
+        **Non-default.** Requires the tenant to build their own card-entry UI, which
+        violates the zero-tenant-code principle (NFR-4) — the hosted
+        `POST /subjects/checkout-session` is the recommended path. This exists only
+        for tenants who deliberately want their payment UI on their own domain.
+
+        Behavior (converges on the same outcome as the hosted path):
+        1. Create/reference the subject; ensure a Stripe Customer.
+        2. Set the supplied `payment_method_id` as the customer's default so
+           recurring charges auto-charge off-session (US-10).
+        3. **Prepaid:** charge the first window base off-session (reusing the
+           `create_and_finalize_proration_invoice` path) and idempotently claim the
+           window-1 `Base` `InvoiceRecord` (same deterministic id as the hosted path
+           and the recurring `invoice_job`). **Postpaid:** no charge at signup.
+        4. Elevate the subject to `billable`.
+
+        Parameters
+        ----------
+        email : str
+
+        payment_method_id : str
+            The confirmed payment method id captured by the tenant's own card form.
+
+        subject_id : str
+
+        name : typing.Optional[str]
+
+        plan_key : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[CheckoutFallbackResponse]
+            Subject onboarded via embedded fallback
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "subjects/checkout-fallback",
+            method="POST",
+            json={
+                "email": email,
+                "name": name,
+                "payment_method_id": payment_method_id,
+                "plan_key": plan_key,
+                "subject_id": subject_id,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    CheckoutFallbackResponse,
+                    parse_obj_as(
+                        type_=CheckoutFallbackResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 502:
+                raise BadGatewayError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_checkout_session(
+        self,
+        *,
+        cancel_url: str,
+        email: str,
+        subject_id: str,
+        success_url: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[CheckoutSessionResponse]:
+        """
+        Creates (or references) a subject in the `pending_checkout` state and returns
+        a Stripe-hosted onboarding URL, with the Session mode branched from the
+        schema's `billing_mode` (prepaid ⇒ `payment`, postpaid ⇒ `setup`). The
+        tenant-facing contract is identical for both modes.
+
+        - 400 if `subject_id`/`email`/`success_url`/`cancel_url` are missing.
+        - 422 if no schema is uploaded, or `plan_key` is not in the schema, or (for
+          prepaid) the resolved plan has no positive `price` to charge.
+        - 409 if the subject already exists and is already billable (paid) — nothing
+          to onboard.
+        - 502 if Stripe fails (Customer or Session creation). The subject is left in
+          a retryable state.
+        - 200 with `{ url, session_id, billing_mode }` on success.
+
+        Parameters
+        ----------
+        cancel_url : str
+            Where Stripe redirects the subject on cancel.
+
+        email : str
+            Email for the Stripe Customer / receipts (required to create a Customer).
+
+        subject_id : str
+            The subject to onboard. Created (in `pending_checkout` state) if new;
+            referenced if it already exists.
+
+        success_url : str
+            Where Stripe redirects the subject on success.
+
+        name : typing.Optional[str]
+            Optional display name.
+
+        plan_key : typing.Optional[str]
+            Plan to onboard onto. Defaults to the schema's `default_plan` when unset.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[CheckoutSessionResponse]
+            Hosted onboarding session created
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "subjects/checkout-session",
+            method="POST",
+            json={
+                "cancel_url": cancel_url,
+                "email": email,
+                "name": name,
+                "plan_key": plan_key,
+                "subject_id": subject_id,
+                "success_url": success_url,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    CheckoutSessionResponse,
+                    parse_obj_as(
+                        type_=CheckoutSessionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 502:
+                raise BadGatewayError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
@@ -697,6 +972,278 @@ class AsyncRawSubjectsClient:
                 )
             if _response.status_code == 401:
                 raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def create_checkout_fallback(
+        self,
+        *,
+        email: str,
+        payment_method_id: str,
+        subject_id: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[CheckoutFallbackResponse]:
+        """
+        **Non-default.** Requires the tenant to build their own card-entry UI, which
+        violates the zero-tenant-code principle (NFR-4) — the hosted
+        `POST /subjects/checkout-session` is the recommended path. This exists only
+        for tenants who deliberately want their payment UI on their own domain.
+
+        Behavior (converges on the same outcome as the hosted path):
+        1. Create/reference the subject; ensure a Stripe Customer.
+        2. Set the supplied `payment_method_id` as the customer's default so
+           recurring charges auto-charge off-session (US-10).
+        3. **Prepaid:** charge the first window base off-session (reusing the
+           `create_and_finalize_proration_invoice` path) and idempotently claim the
+           window-1 `Base` `InvoiceRecord` (same deterministic id as the hosted path
+           and the recurring `invoice_job`). **Postpaid:** no charge at signup.
+        4. Elevate the subject to `billable`.
+
+        Parameters
+        ----------
+        email : str
+
+        payment_method_id : str
+            The confirmed payment method id captured by the tenant's own card form.
+
+        subject_id : str
+
+        name : typing.Optional[str]
+
+        plan_key : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[CheckoutFallbackResponse]
+            Subject onboarded via embedded fallback
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "subjects/checkout-fallback",
+            method="POST",
+            json={
+                "email": email,
+                "name": name,
+                "payment_method_id": payment_method_id,
+                "plan_key": plan_key,
+                "subject_id": subject_id,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    CheckoutFallbackResponse,
+                    parse_obj_as(
+                        type_=CheckoutFallbackResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 502:
+                raise BadGatewayError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        except ValidationError as e:
+            raise ParsingError(
+                status_code=_response.status_code, headers=dict(_response.headers), body=_response.json(), cause=e
+            )
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def create_checkout_session(
+        self,
+        *,
+        cancel_url: str,
+        email: str,
+        subject_id: str,
+        success_url: str,
+        name: typing.Optional[str] = OMIT,
+        plan_key: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[CheckoutSessionResponse]:
+        """
+        Creates (or references) a subject in the `pending_checkout` state and returns
+        a Stripe-hosted onboarding URL, with the Session mode branched from the
+        schema's `billing_mode` (prepaid ⇒ `payment`, postpaid ⇒ `setup`). The
+        tenant-facing contract is identical for both modes.
+
+        - 400 if `subject_id`/`email`/`success_url`/`cancel_url` are missing.
+        - 422 if no schema is uploaded, or `plan_key` is not in the schema, or (for
+          prepaid) the resolved plan has no positive `price` to charge.
+        - 409 if the subject already exists and is already billable (paid) — nothing
+          to onboard.
+        - 502 if Stripe fails (Customer or Session creation). The subject is left in
+          a retryable state.
+        - 200 with `{ url, session_id, billing_mode }` on success.
+
+        Parameters
+        ----------
+        cancel_url : str
+            Where Stripe redirects the subject on cancel.
+
+        email : str
+            Email for the Stripe Customer / receipts (required to create a Customer).
+
+        subject_id : str
+            The subject to onboard. Created (in `pending_checkout` state) if new;
+            referenced if it already exists.
+
+        success_url : str
+            Where Stripe redirects the subject on success.
+
+        name : typing.Optional[str]
+            Optional display name.
+
+        plan_key : typing.Optional[str]
+            Plan to onboard onto. Defaults to the schema's `default_plan` when unset.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[CheckoutSessionResponse]
+            Hosted onboarding session created
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "subjects/checkout-session",
+            method="POST",
+            json={
+                "cancel_url": cancel_url,
+                "email": email,
+                "name": name,
+                "plan_key": plan_key,
+                "subject_id": subject_id,
+                "success_url": success_url,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    CheckoutSessionResponse,
+                    parse_obj_as(
+                        type_=CheckoutSessionResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Any,
+                        parse_obj_as(
+                            type_=typing.Any,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 502:
+                raise BadGatewayError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Any,
